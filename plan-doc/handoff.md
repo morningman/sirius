@@ -53,7 +53,7 @@
 
 ## 下一步
 
-**买 GPU 机做 MVP-A0**（`tasklist.md` A0.4～A0.7；规格见 `doris-pseudo-be-plan.md` §4.2 / ADR-011 第 4 条：AWS `g6e.2xlarge`，Ubuntu 22.04/24.04，驱动 ≥580.65.06，gp3 ≥500 GB）。GPU 机上的清单：
+**买 GPU 机做 MVP-A0**（`tasklist.md` A0.4～A0.7）。**用户 09-18 晚选定 `g4dn.2xlarge`**（T4 16 GB，32 GB 内存）而不是 g6e：OS = Ubuntu 24.04 LTS x86_64 + NVIDIA 580 驱动，根卷 gp3 300 GB，**BE 必须带 `--sirius-config` 把 host pin 内存限到 ~12Gi**——细节和 YAML 样例在 `doris-pseudo-be-plan.md` §4.2「09-18 晚实际选型」。GPU 机上的清单：
 
 **第 0 步 · Linux x64 验证（GPU 机上的第一件事，编引擎之前做）**——到今天为止全部代码只在 macOS arm64 上跑过，`pixi.lock` 虽然已为 linux-64 / linux-aarch64 解好（`be`/`fe`/`check` 三个环境的 conda 包都锁了，`engine` 的 CUDA 包也锁了），但没有装过、没有编过、没有跑过。分三层，逐层过了再往下：
 - 0a **CI 同款三项**（= `.github/workflows/experimental.yml` 的 `doris` job，ubuntu-24.04）：`cd experimental/doris && CONDA_OVERRIDE_CUDA=13 pixi install -e be`（无 GPU 驱动的机器需要这个变量；有驱动的 GPU 机不需要），然后

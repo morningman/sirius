@@ -408,6 +408,15 @@ B 的增量全是 A 从未触碰的面：
 
 费用量级：单卡按需每小时个位数美元，4 卡两位数；用 spot + 不用就停 + EBS 快照保留环境。以 AWS 定价页为准。
 
+**09-18 晚实际选型：`g4dn.2xlarge`**（1×T4 16 GB，CC 7.5 = Sirius 支持的下限，8 vCPU，32 GB，225 GB NVMe 实例盘，≈$0.75/h）。够 MVP-A0 验正确性（SF1/SF10），性能数字不代表 L40S。配套决定：
+- **OS**：Ubuntu Server **24.04 LTS x86_64**（Canonical 官方 AMI，glibc 2.39，io_uring 默认开，与 CI 的 ubuntu-24.04 一致）；驱动自己装 NVIDIA apt 源的 **580**（`nvidia-driver-580-open`，T4 支持 open 内核模块），`nvidia-smi` 要显示 `CUDA Version: 13.x`。
+  不要 Amazon Linux 2（glibc 2.26）；DLAMI 自带驱动可能 < 580，`experimental/doris` 的 `engine` 环境只有 CUDA 13 一档（根仓库才有 `cuda12`），所以驱动 ≥ 580 是硬要求。
+- **盘**：根卷 gp3 **300 GB**（吞吐提到 250 MB/s）；估算 OS 10 + 根 pixi 环境（CUDA 13 + RAPIDS + clang）15–20 + Sirius build 树 + sccache 20–30 + `experimental/doris`（target 10 + `.duckdb-substrait` 3 + FE 1.2）15 + TPC-H SF1/SF10 3 ≈ 70–90 GB；要跑 SF100（parquet ≈30 GB + 落盘 spill）再扩到 500 GB（EBS 在线扩容，`growpart` + `resize2fs`）。
+  225 GB NVMe 实例盘停机即清空，只当 scratch：Sirius 的 `memory.disk.downgrade_root_dirs` 和 parquet 副本可以放那里，别放 build 树。
+- **32 GB 内存是最大的坑**：Sirius 默认把每个 NUMA 节点 **90% 内存 pin 成 host tier**（28.8 GB），FE 4 GB heap + BE + DuckDB 就没地方了。BE 启动必须带 `--sirius-config` 指向一个 YAML，例如
+  `sirius: { topology: { num_gpus: 1 }, memory: { gpu: { usage_limit_fraction: 0.9 }, host: { capacity_bytes: 12Gi }, disk: { disk_id: 0, capacity_bytes: 100Gi, downgrade_root_dirs: "/mnt/nvme/sirius_spill" } } }`
+  （键名见 `docs/super-sirius/configuration.md`；SF10 在 16 GB 显存上要靠 host/disk 降级，disk 段别省）。
+
 ### 4.3 GPU 机搭建步骤（一次性）
 
 ```bash
