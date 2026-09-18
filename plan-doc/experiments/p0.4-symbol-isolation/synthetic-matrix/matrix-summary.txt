@@ -1,0 +1,168 @@
+host_noexport | plugin_conda_dyn | RTLD_local | test0          | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=7036001 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffa4530690 absl=ok(7)
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_conda_dyn | RTLD_local | test1          | OK (internal throw/catch rc=0)
+host_noexport | plugin_conda_dyn | RTLD_local | test2          | CRASH signal=6 (Aborted)
+host_noexport | plugin_conda_dyn | RTLD_deepbind | test0       | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=7036001 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaae9a01300 absl=ok(7)
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_conda_dyn | RTLD_deepbind | test1       | OK (internal throw/catch rc=0)
+host_noexport | plugin_conda_dyn | RTLD_deepbind | test2       | CRASH signal=6 (Aborted)
+host_noexport | plugin_conda_dyn | RTLD_global | test0         | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=7036001 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffb6f30690 absl=ok(7)
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_conda_dyn | RTLD_global | test1         | OK (internal throw/catch rc=0)
+host_noexport | plugin_conda_dyn | RTLD_global | test2         | CRASH signal=6 (Aborted)
+host_noexport | plugin_conda_dyn_leaky | RTLD_local | test0    | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=7036001 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffff96f30690 absl=ok(7)
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_conda_dyn_leaky | RTLD_local | test1    | OK (internal throw/catch rc=0)
+host_noexport | plugin_conda_dyn_leaky | RTLD_local | test2    | CRASH signal=6 (Aborted)
+host_noexport | plugin_conda_dyn_leaky | RTLD_deepbind | test0 | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=7036001 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaad0084300 absl=ok(7)
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_conda_dyn_leaky | RTLD_deepbind | test1 | OK (internal throw/catch rc=0)
+host_noexport | plugin_conda_dyn_leaky | RTLD_deepbind | test2 | CRASH signal=6 (Aborted)
+host_noexport | plugin_conda_dyn_leaky | RTLD_global | test0   | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=7036001 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffa4d30690 absl=ok(7)
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_conda_dyn_leaky | RTLD_global | test1   | OK (internal throw/catch rc=0)
+host_noexport | plugin_conda_dyn_leaky | RTLD_global | test2   | CRASH signal=6 (Aborted)
+host_noexport | plugin_static_hidden | RTLD_local | test0      | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffff82ac3ba0
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_static_hidden | RTLD_local | test1      | OK (internal throw/catch rc=0)
+host_noexport | plugin_static_hidden | RTLD_local | test2      | CRASH signal=6 (Aborted)
+host_noexport | plugin_static_hidden | RTLD_deepbind | test0   | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaaf0d441a0
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_static_hidden | RTLD_deepbind | test1   | OK (internal throw/catch rc=0)
+host_noexport | plugin_static_hidden | RTLD_deepbind | test2   | CRASH signal=6 (Aborted)
+host_noexport | plugin_static_hidden | RTLD_global | test0     | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffad8c3ba0
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_static_hidden | RTLD_global | test1     | OK (internal throw/catch rc=0)
+host_noexport | plugin_static_hidden | RTLD_global | test2     | CRASH signal=6 (Aborted)
+host_noexport | plugin_static_leaky | RTLD_local | test0       | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffb98c3c00
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_static_leaky | RTLD_local | test1       | OK (internal throw/catch rc=0)
+host_noexport | plugin_static_leaky | RTLD_local | test2       | CRASH signal=6 (Aborted)
+host_noexport | plugin_static_leaky | RTLD_deepbind | test0    | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaad0c931a0
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_static_leaky | RTLD_deepbind | test1    | OK (internal throw/catch rc=0)
+host_noexport | plugin_static_leaky | RTLD_deepbind | test2    | CRASH signal=6 (Aborted)
+host_noexport | plugin_static_leaky | RTLD_global | test0      | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffb52c3c00
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_static_leaky | RTLD_global | test1      | OK (internal throw/catch rc=0)
+host_noexport | plugin_static_leaky | RTLD_global | test2      | CRASH signal=6 (Aborted)
+host_noexport | plugin_fullstatic_hidden | RTLD_local | test0  | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffaa2c3b40
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_fullstatic_hidden | RTLD_local | test1  | OK (internal throw/catch rc=0)
+host_noexport | plugin_fullstatic_hidden | RTLD_local | test2  | CRASH signal=6 (Aborted)
+host_noexport | plugin_fullstatic_hidden | RTLD_deepbind | test0 | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaadfe9a190
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_fullstatic_hidden | RTLD_deepbind | test1 | OK (internal throw/catch rc=0)
+host_noexport | plugin_fullstatic_hidden | RTLD_deepbind | test2 | CRASH signal=6 (Aborted)
+host_noexport | plugin_fullstatic_hidden | RTLD_global | test0 | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffbecc3b40
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_noexport | plugin_fullstatic_hidden | RTLD_global | test1 | OK (internal throw/catch rc=0)
+host_noexport | plugin_fullstatic_hidden | RTLD_global | test2 | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_conda_dyn | RTLD_local | test0          | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_conda_dyn | RTLD_local | test1          | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_conda_dyn | RTLD_local | test2          | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_conda_dyn | RTLD_deepbind | test0       | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=7036001 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaae61e9300 absl=ok(7)
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_conda_dyn | RTLD_deepbind | test1       | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_conda_dyn | RTLD_deepbind | test2       | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_conda_dyn | RTLD_global | test0         | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_conda_dyn | RTLD_global | test1         | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_conda_dyn | RTLD_global | test2         | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_conda_dyn_leaky | RTLD_local | test0    | CRASH signal=11 (Segmentation fault)
+host_rdynamic | plugin_conda_dyn_leaky | RTLD_local | test1    | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_conda_dyn_leaky | RTLD_local | test2    | CAUGHT_AS_STD_EXCEPTION what=boom-from-plugin
+host_rdynamic | plugin_conda_dyn_leaky | RTLD_deepbind | test0 | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=7036001 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaad2dea300 absl=ok(7)
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_conda_dyn_leaky | RTLD_deepbind | test1 | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_conda_dyn_leaky | RTLD_deepbind | test2 | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_conda_dyn_leaky | RTLD_global | test0   | CRASH signal=11 (Segmentation fault)
+host_rdynamic | plugin_conda_dyn_leaky | RTLD_global | test1   | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_conda_dyn_leaky | RTLD_global | test2   | CAUGHT_AS_STD_EXCEPTION what=boom-from-plugin
+host_rdynamic | plugin_static_hidden | RTLD_local | test0      | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=1 same_malloc=1 same_cout=1
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffff9b8c3ba0
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_static_hidden | RTLD_local | test1      | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_static_hidden | RTLD_local | test2      | CAUGHT_AS_STD_EXCEPTION what=boom-from-plugin
+host_rdynamic | plugin_static_hidden | RTLD_deepbind | test0   | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaaf2ad41a0
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_static_hidden | RTLD_deepbind | test1   | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_static_hidden | RTLD_deepbind | test2   | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_static_hidden | RTLD_global | test0     | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=1 same_malloc=1 same_cout=1
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffa74c3ba0
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_static_hidden | RTLD_global | test1     | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_static_hidden | RTLD_global | test2     | CAUGHT_AS_STD_EXCEPTION what=boom-from-plugin
+host_rdynamic | plugin_static_leaky | RTLD_local | test0       | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=1 same_typeinfo(runtime_error)=1 same_malloc=1 same_cout=1
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffacac3060
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_static_leaky | RTLD_local | test1       | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_static_leaky | RTLD_local | test2       | CAUGHT_AS_STD_EXCEPTION what=boom-from-plugin
+host_rdynamic | plugin_static_leaky | RTLD_deepbind | test0    | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaab684a1a0
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_static_leaky | RTLD_deepbind | test1    | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_static_leaky | RTLD_deepbind | test2    | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_static_leaky | RTLD_global | test0      | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=1 same_typeinfo(runtime_error)=1 same_malloc=1 same_cout=1
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffff8c0c3060
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_static_leaky | RTLD_global | test1      | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_static_leaky | RTLD_global | test2      | CAUGHT_AS_STD_EXCEPTION what=boom-from-plugin
+host_rdynamic | plugin_fullstatic_hidden | RTLD_local | test0  | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffff8cac3b40
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_fullstatic_hidden | RTLD_local | test1  | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_fullstatic_hidden | RTLD_local | test2  | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_fullstatic_hidden | RTLD_deepbind | test0 | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=0 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xaaaae1ab1190
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_fullstatic_hidden | RTLD_deepbind | test1 | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_fullstatic_hidden | RTLD_deepbind | test2 | CRASH signal=6 (Aborted)
+host_rdynamic | plugin_fullstatic_hidden | RTLD_global | test0 | OK (rc=0 probe_rc=0 host_reparse=1)
+                                                               |   same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+                                                               |   pb=3021012 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffb54c3b40
+                                                               |   probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+host_rdynamic | plugin_fullstatic_hidden | RTLD_global | test1 | OK (internal throw/catch rc=0)
+host_rdynamic | plugin_fullstatic_hidden | RTLD_global | test2 | CRASH signal=6 (Aborted)

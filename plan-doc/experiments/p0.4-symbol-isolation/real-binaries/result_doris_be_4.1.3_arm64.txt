@@ -1,0 +1,74 @@
+Unable to find image 'ubuntu:24.04' locally
+24.04: Pulling from library/ubuntu
+0b613318ea87: Pulling fs layer
+c176d2b976dc: Download complete
+0b613318ea87: Download complete
+Digest: sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+Status: Downloaded newer image for ubuntu:24.04
+== file ==
+/w/doris_be: ELF 64-bit LSB pie executable, ARM aarch64, version 1 (SYSV), dynamically linked, interpreter /lib/ld-linux-aarch64.so.1, for GNU/Linux 3.7.0, with debug_info, not stripped
+== DT_NEEDED ==
+ 0x0000000000000001 (NEEDED)             Shared library: [libjvm.so]
+ 0x0000000000000001 (NEEDED)             Shared library: [libresolv.so.2]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so.2]
+ 0x0000000000000001 (NEEDED)             Shared library: [libpthread.so.0]
+ 0x0000000000000001 (NEEDED)             Shared library: [librt.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-aarch64.so.1]
+ 0x000000006ffffffb (FLAGS_1)            Flags: PIE
+== program headers (interp / GNU_EH_FRAME) ==
+  INTERP         0x0002e0 0x00000000000002e0 0x00000000000002e0 0x00001b 0x00001b R   0x1
+  TLS            0x14657ea0 0x0000000014677ea0 0x0000000014677ea0 0x000b30 0x008af8 R   0x10
+  GNU_EH_FRAME   0x8c6b5ec 0x0000000008c6b5ec 0x0000000008c6b5ec 0x34d304 0x34d304 R   0x4
+File: /w/doris_be
+== dynsym: total defined =475722 ; undefined(imports)=607
+== defined+exported by category ==
+  protobuf   : 13213
+  absl       : 1290
+  arrow      : 15571
+  libstdc++  : 50662
+  __cxa/unwind: 26
+  malloc-family: 9
+  operator new/delete: 13
+  jemalloc(je_/mallctl): 31
+  dl_iterate_phdr: 0
+  doris::    : 96102
+  GNU_UNIQUE : 0
+== full list of defined exported symbols (first 200) ==
+FUNC WEAK _ZZ11assert_castIPKN5doris26AggregateFunctionTopNArrayINS0_30AggregateFunctionTopNImplArrayILNS0_13PrimitiveTypeE4ELb0EEEEEL18TypeCheckOnRelease1EPNS0_24IAggregateFunctionHelperIS5_EEET_OT1_ENKUlOSC_E_clISB_EES7_SF_
+OBJECT WEAK _ZTSSt23_Sp_counted_ptr_inplaceIN5doris33FunctionDateOrDateTimeComputationINS0_16AddUnionTypeImplILNS0_8TimeUnitE15ELNS0_13PrimitiveTypeE42EEEEESaIvELN9__gnu_cxx12_Lock_policyE2EE
+FUNC WEAK _ZN5arrow6Status8FromArgsIJRA42_KcEEES0_NS_10StatusCodeEDpOT_
+FUNC WEAK _ZThn40_N5faiss11IndexIVFPQRD1Ev
+OBJECT WEAK _ZTIN5doris15MethodOneNumberIj9PHHashMapIjNS_14RowRefWithFlagE9HashCRC32IjEEEE
+FUNC WEAK _ZNSt23_Sp_counted_ptr_inplaceIN5doris18FunctionArraySplitILb0EEESaIvELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv
+FUNC WEAK _ZN5doris9HybridSetILNS_13PrimitiveTypeE11ENS_14FixedContainerINS_16VecDateTimeValueELm4EEENS_12ColumnVectorILS1_11EEEE5to_pbEPNS_9PInFilterE
+FUNC GLOBAL _ZN18S2BooleanOperation4Impl15AddBoundaryPairEbbbPNS0_17CrossingProcessorE
+FUNC WEAK _ZN5doris19IntegerRoundingImplILNS_13PrimitiveTypeE5ELNS_12RoundingModeE11ELNS_9ScaleModeE2ELNS_15TieBreakingModeE0EE5applyERKNS_8PODArrayIiLm4096ENS_9AllocatorILb0ELb0ELb0ENS_22DefaultMemoryAllocatorELb1EEELm16ELm15EEEmRSA_
+OBJECT GLOBAL _ZTVN5doris36BackendService_get_tablet_stat_pargsE
+OBJECT WEAK _ZTVSt23_Sp_counted_ptr_inplaceIN5arrow7compute5match20RunEndEncodedMatcherESaIvELN9__gnu_cxx12_Lock_policyE2EE
+FUNC GLOBAL _ZN7rocksdb3log6ReaderC2ESt10shared_ptrINS_6LoggerEEOSt10unique_ptrINS_20SequentialFileReaderESt14default_deleteIS6_EEPNS1_8ReporterEbmm
+FUNC WEAK _ZN14pdqsort_detail12pdqsort_loopIPmN5doris12ColumnVectorILNS2_13PrimitiveTypeE8EE7greaterELb0EEEvT_S7_T0_ib
+FUNC WEAK _ZN5doris33AggregateFunctionNullBaseInlineV2INS_26AggregateFunctionHistogramINS_30AggregateFunctionHistogramDataILNS_13PrimitiveTypeE25EEELb1EEELb0ENS_34AggregateFunctionNullUnaryInlineV2IS5_Lb0EEEED0Ev
+FUNC WEAK _ZN7leveldb8MemTable13KeyComparatorD2Ev
+FUNC WEAK _ZNK5doris24IAggregateFunctionHelperINS_32AggregateFunctionNullUnaryInlineINS_20AggregateFunctionAvgILNS_13PrimitiveTypeE5ELS3_9ENS_24AggregateFunctionAvgDataILS3_6EEEEELb1EEEE18merge_vec_selectedEPrKPcmPKcRNS_5ArenaEm
+OBJECT WEAK _ZTSN5doris10CastToImplILNS_12CastModeTypeE0ENS_14DataTypeTimeV2ENS_14DataTypeNumberILNS_13PrimitiveTypeE2EEEEE
+OBJECT WEAK _ZTVSt23_Sp_counted_ptr_inplaceIN5doris12FunctionTrimINS0_9Trim2ImplILb1ELb0ENS0_9NameLTrimEEEEESaIvELN9__gnu_cxx12_Lock_policyE2EE
+FUNC GLOBAL _ZN5doris21BrokerTableDescriptorC2ERKNS_16TTableDescriptorE
+FUNC GLOBAL DIRECTORYSTRING_free
+FUNC GLOBAL s_query_imds_for_instance_type
+FUNC GLOBAL _ZN6lucene6search22FieldDocSortedHitQueueC2EPPNS0_9SortFieldEi
+/home/zcp/repo_center/doris_release/doris/thirdparty/src/protobuf-21.11/src/google/protobuf/stubs/stringprintf.cc
+== abseil version markers ==
+lts_20250512
+== io_uring / CUDA / jemalloc / static-libstdc++ hints ==
+  io_uring_setup: 0
+  libcuda.so: 0
+  jemalloc: 227
+  je_malloc_conf: 0
+  __libc_start_main: 3
+  _ZN5doris10PhdrCache: 0
+== symtab present? ==
+.debug_info PROGBITS 33269581
+.symtab SYMTAB 1b804f0
+ANALYZE_EXIT=0

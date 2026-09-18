@@ -1,0 +1,110 @@
+== ldd of artifact under stub path ==
+  	libcusolver.so.12 => /w/stubs/libcusolver.so.12 (0x0000ffff883d0000)
+  	libcublas.so.13 => /w/stubs/libcublas.so.13 (0x0000ffff883a0000)
+  	libcublasLt.so.13 => /w/stubs/libcublasLt.so.13 (0x0000ffff88370000)
+  	libcusparse.so.12 => /w/stubs/libcusparse.so.12 (0x0000ffff88340000)
+  	libcurand.so.10 => /w/stubs/libcurand.so.10 (0x0000ffff88310000)
+  	libgomp.so.1 => /w/stubs/libgomp.so.1 (0x0000ffff882e0000)
+  	libpthread.so.0 => /lib/aarch64-linux-gnu/libpthread.so.0 (0x0000ffff882c0000)
+  	libnvJitLink.so.13 => /w/stubs/libnvJitLink.so.13 (0x0000ffff88290000)
+  	libnvrtc.so.13 => /w/stubs/libnvrtc.so.13 (0x0000ffff88260000)
+  	libnvidia-ml.so.1 => /w/stubs/libnvidia-ml.so.1 (0x0000ffff88230000)
+  	libgcc_s.so.1 => /lib/aarch64-linux-gnu/libgcc_s.so.1 (0x0000ffff88200000)
+  	libutil.so.1 => /lib/aarch64-linux-gnu/libutil.so.1 (0x0000ffff881e0000)
+  	librt.so.1 => /lib/aarch64-linux-gnu/librt.so.1 (0x0000ffff881c0000)
+  	libcuda.so.1 => /w/stubs/libcuda.so.1 (0x0000ffff88190000)
+  	libdl.so.2 => /lib/aarch64-linux-gnu/libdl.so.2 (0x0000ffff88170000)
+  	libstdc++.so.6 => /lib/aarch64-linux-gnu/libstdc++.so.6 (0x0000ffff87f40000)
+  	libm.so.6 => /lib/aarch64-linux-gnu/libm.so.6 (0x0000ffff87ea0000)
+  	libc.so.6 => /lib/aarch64-linux-gnu/libc.so.6 (0x0000ffff87cf0000)
+  	/lib/ld-linux-aarch64.so.1 (0x0000ffffa2140000)
+== run: LD_BIND_NOW=1 LD_PRELOAD=artifact doris_be --version ==
+doris-4.1.3-rc02(AArch64) RELEASE features: -TDE,-VARIANT_NESTED_GROUP,-HDFS_STORAGE_VAULT,+UI,-AZURE_BLOB,-AZURE_STORAGE_VAULT,-HIVE_UDF,+BE_JAVA_EXTENSIONS (build git://qa-regression-nodes-agent@7126cf65d96ebc43fce0906f51e92c1a2ccf24a6)
+Built on Wed, 08 Jul 2026 20:29:51 CST by qa-regression-nodes-agent
+exit=0
+debug file: /w/lddebug.19 (6567 lines)
+== bindings FROM sirius.duckdb_extension, grouped by provider ==
+   1103 /w/sirius.duckdb_extension
+    687 /opt/apache-doris/be/lib/doris_be
+    336 /lib/aarch64-linux-gnu/libc.so.6
+     27 /lib/aarch64-linux-gnu/libm.so.6
+     14 /w/stubs/libnvidia-ml.so.1
+     14 /lib/aarch64-linux-gnu/libgcc_s.so.1
+     11 /w/stubs/libcublasLt.so.13
+     10 /w/stubs/libnvrtc.so.13
+     10 /w/stubs/libcusparse.so.12
+     10 /w/stubs/libcuda.so.1
+      8 /w/stubs/libnvJitLink.so.13
+      5 /w/stubs/libcublas.so.13
+      1 /lib/ld-linux-aarch64.so.1
+      1 /lib/aarch64-linux-gnu/libstdc++.so.6
+== extension symbols bound to doris_be, by family ==
+  total: 687
+  libstdc++ (_ZSt/_ZNSt/_ZNKSt/_ZTV/_ZTI/_ZTS St): 549
+  __cxa_* / __dynamic_cast / __cxxabiv1: 22
+  _Unwind_* / libgcc: 0
+  operator new/delete: 10
+  malloc family: 14
+  glibc-compat interposed libc (memcpy/pthread_*name*/getrandom/_chk/explicit_bzero/clock_gettime/epoll/glob): 11
+  protobuf: 0
+  absl: 0
+  openssl/curl/zstd/lz4/zlib: 0
+  other (sample):
+          2 getentropy
+          2 __gxx_personality_v0
+          1 vasprintf
+          1 timerfd_settime
+          1 timerfd_create
+          1 sscanf
+          1 secure_getenv
+          1 sched_getcpu
+          1 pow
+          1 log2
+          1 log
+          1 getauxval
+          1 fallocate
+          1 explicit_bzero
+          1 exp
+          1 eventfd
+          1 epoll_wait
+          1 epoll_ctl
+          1 epoll_create1
+          1 clock_gettime
+          1 accept4
+          1 __once_proxy
+          1 __isoc99_sscanf
+          1 _ZZNSt8__detail18__waiter_pool_base6_S_forEPKvE3__w
+          1 _ZZNKSt8__detail9_ExecutorIN9__gnu_cxx17__normal_iteratorIPKcNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEEESaINS5_9sub_matchISB_EEENS5_12regex_traitsIcEELb1EE10_M_is_wordEcE3__s
+          1 _ZZNKSt8__detail9_ExecutorIN9__gnu_cxx17__normal_iteratorIPKcNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEEESaINS5_9sub_matchISB_EEENS5_12regex_traitsIcEELb0EE10_M_is_wordEcE3__s
+          1 _ZZNKSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1ELb1EEclEcE5__nul
+          1 _ZZNKSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1ELb0EEclEcE5__nul
+          1 _ZZNKSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb0ELb1EEclEcE5__nul
+          1 _ZZNKSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb0ELb0EEclEcE5__nul
+          1 _ZZNKSt7__cxx1112regex_traitsIcE18lookup_collatenameIPKcEENS_12basic_stringIcSt11char_traitsIcESaIcEEET_SA_E14__collatenames
+          1 _ZTTSt14basic_ofstreamIcSt11char_traitsIcEE
+          1 _ZTTSt14basic_ifstreamIcSt11char_traitsIcEE
+          1 _ZTTNSt7__cxx1119basic_ostringstreamIcSt11char_traitsIcESaIcEEE
+          1 _ZTTNSt7__cxx1119basic_istringstreamIcSt11char_traitsIcESaIcEEE
+          1 _ZTTNSt7__cxx1118basic_stringstreamIcSt11char_traitsIcESaIcEEE
+          1 _ZNSs4_Rep20_S_empty_rep_storageE
+          1 _ZNSolsEs
+          1 _ZNSolsEi
+          1 _ZNSolsEPSt15basic_streambufIcSt11char_traitsIcEE
+== sample of libstdc++ symbols bound to doris_be (versioned refs satisfied by unversioned exe symbols) ==
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt12format_errorD0Ev'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt8__format9_Seq_sinkINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEE11_M_overflowEv'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt8__format9_Seq_sinkINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEE10_M_reserveEm'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt8__format9_Seq_sinkINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEE7_M_bumpEm'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt8__format10_Iter_sinkIcNS_10_Sink_iterIcEEE11_M_overflowEv'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt8__format5_SinkIcE10_M_reserveEm'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt8__format5_SinkIcE7_M_bumpEm'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt8__format19_Formatting_scannerINS_10_Sink_iterIcEEcE11_M_on_charsEPKc'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt8__format19_Formatting_scannerINS_10_Sink_iterIcEEcE13_M_format_argEm'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt23_Sp_counted_ptr_inplaceINSt8__detail4_NFAINSt7__cxx1112regex_traitsIcEEEESaIvELN9__gnu_cxx12_Lock_policyE2EED0Ev'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt23_Sp_counted_ptr_inplaceINSt8__detail4_NFAINSt7__cxx1112regex_traitsIcEEEESaIvELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv'
+          19:	binding file /w/sirius.duckdb_extension [0] to /opt/apache-doris/be/lib/doris_be [0]: normal symbol `_ZNSt23_Sp_counted_ptr_inplaceINSt8__detail4_NFAINSt7__cxx1112regex_traitsIcEEEESaIvELN9__gnu_cxx12_Lock_policyE2EE10_M_destroyEv'
+== extension symbols bound to system libstdc++.so.6 (not exported by doris_be): ==
+  __cxa_thread_atexit
+  count: 1
+== also: what binds INTO the extension from others (should be ~0 under RTLD_LOCAL-like isolation) ==
+PRELOAD_EXIT=0

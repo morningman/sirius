@@ -1,0 +1,40 @@
+== toolchains ==
+g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+libprotoc 3.21.12
+/opt/pb21/lib/libprotobuf.a
+/usr/lib/aarch64-linux-gnu/libjemalloc.a
+conda CXX=/opt/conda/envs/sirius/bin/aarch64-conda-linux-gnu-g++
+aarch64-conda-linux-gnu-g++ (conda-forge gcc 15.3.0-4) 15.3.0
+libprotoc 36.1
+/opt/conda/envs/sirius/lib/libprotobuf.so
+/opt/conda/envs/sirius/lib/libprotobuf.so.36.1.0
+/opt/conda/envs/sirius/lib/libstdc++.so.6
+/opt/conda/envs/sirius/lib/libstdc++.so.6.0.36
+
+== build hosts (system g++, static libstdc++/libgcc, static protobuf 3.21, static jemalloc) ==
+-- host_noexport: DT_NEEDED: libc.so.6 ld-linux-aarch64.so.1 
+   dynsym defined total=9 protobuf=0 malloc/free=2 libstdc++=0 gnu_unique=0
+-- host_rdynamic: DT_NEEDED: libc.so.6 ld-linux-aarch64.so.1 
+   dynsym defined total=8733 protobuf=3821 malloc/free=2 libstdc++=2453 gnu_unique=111
+
+== build plugins ==
+-- plugin_conda_dyn.so: exported dynsym=344 protobuf_exports=0 gnu_unique=21
+   DT_NEEDED: libprotobuf.so.36.1.0 libabsl_raw_hash_set.so.2605.0.0 libabsl_cord.so.2605.0.0 libabsl_cordz_info.so.2605.0.0 libabsl_cord_internal.so.2605.0.0 libabsl_cordz_functions.so.2605.0.0 libabsl_cordz_handle.so.2605.0.0 libabsl_crc_cord_state.so.2605.0.0 libabsl_crc32c.so.2605.0.0 libabsl_crc_internal.so.2605.0.0 libabsl_crc_cpu_detect.so.2605.0.0 libabsl_str_format_internal.so.2605.0.0 libabsl_hash.so.2605.0.0 libabsl_city.so.2605.0.0 libabsl_hashtablez_sampler.so.2605.0.0 libabsl_exponential_biased.so.2605.0.0 libabsl_synchronization.so.2605.0.0 libabsl_graphcycles_internal.so.2605.0.0 libabsl_kernel_timeout_internal.so.2605.0.0 libabsl_stacktrace.so.2605.0.0 libabsl_symbolize.so.2605.0.0 libabsl_debugging_internal.so.2605.0.0 libabsl_demangle_internal.so.2605.0.0 libabsl_demangle_rust.so.2605.0.0 libabsl_decode_rust_punycode.so.2605.0.0 libabsl_utf8_for_code_point.so.2605.0.0 libabsl_malloc_internal.so.2605.0.0 libabsl_tracing_internal.so.2605.0.0 libabsl_time.so.2605.0.0 libabsl_civil_time.so.2605.0.0 libabsl_strings.so.2605.0.0 libabsl_strings_internal.so.2605.0.0 libabsl_int128.so.2605.0.0 libabsl_base.so.2605.0.0 libabsl_spinlock_wait.so.2605.0.0 libabsl_source_location.so.2605.0.0 libabsl_time_zone.so.2605.0.0 libabsl_throw_delegate.so.2605.0.0 libabsl_raw_logging_internal.so.2605.0.0 libabsl_log_severity.so.2605.0.0 libstdc++.so.6 libm.so.6 libgcc_s.so.1 libc.so.6 
+-- plugin_conda_dyn_leaky.so: exported dynsym=471 protobuf_exports=51 gnu_unique=25
+   DT_NEEDED: libprotobuf.so.36.1.0 libabsl_raw_hash_set.so.2605.0.0 libabsl_cord.so.2605.0.0 libabsl_cordz_info.so.2605.0.0 libabsl_cord_internal.so.2605.0.0 libabsl_cordz_functions.so.2605.0.0 libabsl_cordz_handle.so.2605.0.0 libabsl_crc_cord_state.so.2605.0.0 libabsl_crc32c.so.2605.0.0 libabsl_crc_internal.so.2605.0.0 libabsl_crc_cpu_detect.so.2605.0.0 libabsl_str_format_internal.so.2605.0.0 libabsl_hash.so.2605.0.0 libabsl_city.so.2605.0.0 libabsl_hashtablez_sampler.so.2605.0.0 libabsl_exponential_biased.so.2605.0.0 libabsl_synchronization.so.2605.0.0 libabsl_graphcycles_internal.so.2605.0.0 libabsl_kernel_timeout_internal.so.2605.0.0 libabsl_stacktrace.so.2605.0.0 libabsl_symbolize.so.2605.0.0 libabsl_debugging_internal.so.2605.0.0 libabsl_demangle_internal.so.2605.0.0 libabsl_demangle_rust.so.2605.0.0 libabsl_decode_rust_punycode.so.2605.0.0 libabsl_utf8_for_code_point.so.2605.0.0 libabsl_malloc_internal.so.2605.0.0 libabsl_tracing_internal.so.2605.0.0 libabsl_time.so.2605.0.0 libabsl_civil_time.so.2605.0.0 libabsl_strings.so.2605.0.0 libabsl_strings_internal.so.2605.0.0 libabsl_int128.so.2605.0.0 libabsl_base.so.2605.0.0 libabsl_spinlock_wait.so.2605.0.0 libabsl_source_location.so.2605.0.0 libabsl_time_zone.so.2605.0.0 libabsl_throw_delegate.so.2605.0.0 libabsl_raw_logging_internal.so.2605.0.0 libabsl_log_severity.so.2605.0.0 libstdc++.so.6 libm.so.6 libgcc_s.so.1 libc.so.6 
+-- plugin_static_hidden.so: exported dynsym=7 protobuf_exports=0 gnu_unique=0
+   DT_NEEDED: libstdc++.so.6 libm.so.6 libgcc_s.so.1 libc.so.6 ld-linux-aarch64.so.1 
+-- plugin_static_leaky.so: exported dynsym=4253 protobuf_exports=3819 gnu_unique=20
+   DT_NEEDED: libstdc++.so.6 libm.so.6 libgcc_s.so.1 libc.so.6 ld-linux-aarch64.so.1 
+-- plugin_fullstatic_hidden.so: exported dynsym=7 protobuf_exports=0 gnu_unique=0
+   DT_NEEDED: libm.so.6 libc.so.6 ld-linux-aarch64.so.1 
+
+== RUN MATRIX ==
+### host_noexport | plugin_conda_dyn | RTLD_local | test0
+    host: pb=3021012 host_pool_has_file=1 host_pool=0xffffa44c3060
+    plugin: pb=7036001 rels=3 pool_has_file=1 desc=substrait.Plan pool_ptr=0xffffa4530690 absl=ok(7)
+    same_pool=0 same_typeinfo(runtime_error)=0 same_malloc=1 same_cout=0
+    stdlib_probe: rc=0 regex=1 format+stream+thread=sirius:  42:3.14|84
+    RESULT: OK (rc=0 probe_rc=0 host_reparse=1)
+### host_noexport | plugin_conda_dyn | RTLD_local | test1
+    host: pb=3021012 host_pool_has_file=1 host_pool=0xffff894c3060

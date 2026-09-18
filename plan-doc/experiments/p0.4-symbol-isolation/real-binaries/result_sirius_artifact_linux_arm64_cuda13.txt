@@ -1,0 +1,222 @@
+== file ==
+-rwxr-xr-x 1 root root 519749318 Sep  1 12:16 /w/sirius.duckdb_extension
+/w/sirius.duckdb_extension: ELF 64-bit LSB shared object, ARM aarch64, version 1 (GNU/Linux), dynamically linked, BuildID[sha1]=7b9a926cdd412c2ea52f5d6a183ca04acdce25e1, with debug_info, not stripped
+== DT_NEEDED / RUNPATH ==
+ 0x0000000000000001 (NEEDED)             Shared library: [libcusolver.so.12]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcublas.so.13]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcublasLt.so.13]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcusparse.so.12]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcurand.so.10]
+ 0x0000000000000001 (NEEDED)             Shared library: [libgomp.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libpthread.so.0]
+ 0x0000000000000001 (NEEDED)             Shared library: [libnvJitLink.so.13]
+ 0x0000000000000001 (NEEDED)             Shared library: [libnvrtc.so.13]
+ 0x0000000000000001 (NEEDED)             Shared library: [libnvidia-ml.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libutil.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [librt.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libcuda.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libdl.so.2]
+ 0x0000000000000001 (NEEDED)             Shared library: [libstdc++.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libm.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-aarch64.so.1]
+ 0x000000000000000e (SONAME)             Library soname: [sirius.duckdb_extension]
+== version needs (glibc / libstdc++ / others) ==
+CXXABI_1.3 CXXABI_1.3.2 CXXABI_1.3.3 CXXABI_1.3.5 CXXABI_1.3.7 CXXABI_1.3.8 CXXABI_1.3.9 CXXABI_1.3.11 GCC_3.0 GCC_3.3 GCC_4.2.0 GLIBCXX_3.4 GLIBCXX_3.4.9 GLIBCXX_3.4.11 GLIBCXX_3.4.14 GLIBCXX_3.4.15 GLIBCXX_3.4.17 GLIBCXX_3.4.18 GLIBCXX_3.4.19 GLIBCXX_3.4.20 GLIBCXX_3.4.21 GLIBCXX_3.4.22 GLIBC_2.17 GLIBC_2.18 GLIBC_2.23 GLIBC_2.25 GLIBC_2.28 
+== max glibc version needed ==
+GLIBC_2.28
+== dynsym: defined+exported=1626 ; undefined(imports)=772
+== exported by category ==
+  sirius::ffi      : 29
+  duckdb entry     : 3
+  duckdb::         : 3
+  sirius:: (other) : 122
+  cudf::           : 165
+  rmm::            : 4
+  cucascade::      : 0
+  protobuf         : 14
+  absl             : 0
+  libstdc++        : 767
+  __cxa/unwind     : 0
+  malloc-family    : 0
+  operator new/del : 0
+  openssl/curl     : 0
+  cuda*            : 20
+  GNU_UNIQUE       : 58
+  TLS              : 2
+== exported names (non-sirius/duckdb sample, first 60) ==
+FUNC GLOBAL _ZNK6sirius2op27sirius_dynamic_bloom_filter13replica_countEv
+OBJECT UNIQUE _ZGVZN6thrust8sequenceINS_6detail22execute_with_allocatorIN3rmm2mr16thrust_allocatorIcEENS_8cuda_cub22execute_on_stream_baseEEEPllEEvRKNS1_21execution_policy_baseIT_EET0_SG_T1_E22__cuda_nvtx3_func_name
+OBJECT UNIQUE _ZN4cuda3__414__vtable_for_vINS0_7__iset_IJNS_2mr3__423__ibasic_async_resourceIJEEENS4_17__ibasic_resourceIJEEENS4_15__with_propertyINS4_30dynamic_accessibility_propertyEE11__ipropertyIJEEENS9_INS4_17device_accessibleEE11__ipropertyIJEEENS0_11__icopyableIJEEENS0_22__iequality_comparableIJEEEEEEN9cucascade6memory34reservation_aware_resource_adaptorEEE
+OBJECT WEAK _ZTIN4raft8resource18device_id_resourceE
+OBJECT WEAK _ZTSN4cudf3ast10expressionE
+FUNC GLOBAL _ZNK6sirius3ffi8Fragment12output_typesB5cxx11Ev
+FUNC WEAK _ZNSt23_Sp_counted_ptr_inplaceINSt8__detail4_NFAINSt7__cxx1112regex_traitsIcEEEESaIvELN9__gnu_cxx12_Lock_policyE2EE14_M_get_deleterERKSt9type_info
+FUNC WEAK _ZN4cudf14numeric_scalarIsED1Ev
+FUNC WEAK _ZN4cudf11column_viewD2Ev
+FUNC WEAK _ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZN6sirius4exec18static_thread_poolC4EiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt6vectorIiSaIiEEN4absl12lts_2025081412AnyInvocableIDoFvvEEEEUlvE0_EEEEED0Ev
+FUNC GLOBAL __cudaRegisterLinkedBinary_1445b99c_23_crc32_partition_hash_cu_bdf662f0_8461
+FUNC WEAK _ZNSt23_Sp_counted_ptr_inplaceIKSt8optionalIN6sirius25like_multiliteral_patternEESaIvELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv
+FUNC WEAK _ZNKSt7__cxx1112regex_traitsIcE18lookup_collatenameIPKcEENS_12basic_stringIcSt11char_traitsIcESaIcEEET_SA_
+FUNC WEAK _ZNSt6vectorISt10unique_ptrIN4cudf5tableESt14default_deleteIS2_EESaIS5_EED1Ev
+FUNC WEAK _ZNSt6vectorINSt7__cxx1112regex_traitsIcE10_RegexMaskESaIS3_EE17_M_realloc_appendIJRKS3_EEEvDpOT_
+FUNC WEAK _ZNSt8__detail9_CompilerINSt7__cxx1112regex_traitsIcEEE22_M_insert_char_matcherILb0ELb0EEEvv
+FUNC WEAK _ZNSt19_Sp_counted_deleterIPN4cudf5tableESt14default_deleteIS1_ESaIvELN9__gnu_cxx12_Lock_policyE2EE10_M_destroyEv
+OBJECT UNIQUE _ZZNKSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1ELb1EEclEcE5__nul
+FUNC WEAK _ZNSt8__detail15_BracketMatcherINSt7__cxx1112regex_traitsIcEELb0ELb0EED1Ev
+FUNC WEAK _ZNKSt8__format15__formatter_intIcE6formatIxNS_10_Sink_iterIcEEEENSt20basic_format_contextIT0_cE8iteratorET_RS7_
+FUNC WEAK _ZNSt23_Sp_counted_ptr_inplaceIN4raft8resource33cuda_stream_pool_resource_factoryESaIvELN9__gnu_cxx12_Lock_policyE2EE10_M_disposeEv
+FUNC WEAK _ZNSt17_Function_handlerIFbcENSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1ELb1EEEE9_M_invokeERKSt9_Any_dataOc
+OBJECT WEAK _ZTSN4raft9resourcesE
+OBJECT WEAK _ZTISt12_Vector_baseISt10shared_ptrIN4cudf6columnEESaIS3_EE
+FUNC WEAK _ZN4cudf14numeric_scalarImED2Ev
+FUNC WEAK _ZN4cudf2io7parquet12FileMetaDataC1ERKS2_
+FUNC WEAK _ZNSt3_V222condition_variable_anyD1Ev
+FUNC WEAK _ZNSt9__unicode13_Utf_iteratorIcDiPKcS2_NS_5_ReplEE12_M_read_utf8Ev
+FUNC WEAK _ZNSt23_Sp_counted_ptr_inplaceINSt8__detail4_NFAINSt7__cxx1112regex_traitsIcEEEESaIvELN9__gnu_cxx12_Lock_policyE2EED0Ev
+OBJECT GLOBAL __fatbinwrap_907b9aca_32_sirius_dynamic_in_list_filter_cu_bdf662f0_8614
+FUNC WEAK _ZNSt10unique_ptrIN6sirius2op35sirius_dynamic_small_in_list_filter12needle_storeESt14default_deleteIS3_EED1Ev
+FUNC GLOBAL _ZNK6sirius2op35sirius_dynamic_small_in_list_filter12compute_maskERKN4cudf11column_viewEiN3rmm16cuda_stream_viewEN4cuda2mr3__420__version_bump_ver4_12resource_refIJNSA_17device_accessibleEEEE
+FUNC WEAK _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+FUNC GLOBAL _ZThn16_N6sirius2op35sirius_dynamic_small_in_list_filterD0Ev
+FUNC WEAK _ZNSt10_HashtableINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt4pairIKS5_S5_ESaIS8_ENSt8__detail10_Select1stESt8equal_toIS5_ESt4hashIS5_ENSA_18_Mod_range_hashingENSA_20_Default_ranged_hashENSA_20_Prime_rehash_policyENSA_17_Hashtable_traitsILb1ELb0ELb1EEEE5clearEv
+FUNC WEAK _ZN4cudf16timestamp_scalarIN4cuda3std3__46chrono10time_pointINS4_12system_clockENS4_8durationIlNS3_5ratioILl1ELl1000000000EEEEEEEED2Ev
+FUNC WEAK _ZNSt8__detail15_BracketMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1EE13_M_make_rangeEcc
+OBJECT WEAK _ZTSSt23_Sp_counted_ptr_inplaceISt7promiseImESaIvELN9__gnu_cxx12_Lock_policyE2EE
+FUNC WEAK _ZN4cudf16timestamp_scalarIN4cuda3std3__46chrono10time_pointINS4_12system_clockENS4_8durationIiNS3_5ratioILl86400ELl1EEEEEEEED0Ev
+OBJECT WEAK _ZTISt23_Sp_counted_ptr_inplaceIN4raft8resource22empty_resource_factoryESaIvELN9__gnu_cxx12_Lock_policyE2EE
+FUNC WEAK _ZNSt6vectorIN4cudf11column_viewESaIS1_EEC1ESt16initializer_listIS1_ERKS2_
+OBJECT GLOBAL __fatbinwrap_fcab6259_38_sirius_dynamic_small_in_list_filter_cu_bdf662f0_8523
+FUNC WEAK _ZN4cudf11column_viewC1IiLPv0EEEN4cuda3std3__44spanIKT_Lm18446744073709551615EEE
+FUNC WEAK _ZNSt8__format29__failed_to_parse_format_specEv
+FUNC WEAK _ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJMN6sirius8pipeline14task_schedulerEFvvEPS5_EEEEE6_M_runEv
+FUNC WEAK _ZNSt8_Rb_treeINSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES5_St9_IdentityIS5_ESt4lessIS5_ESaIS5_EE16_M_insert_uniqueIRKS5_EESt4pairISt17_Rb_tree_iteratorIS5_EbEOT_
+FUNC WEAK _ZNSt3_V222condition_variable_any7_UnlockISt11unique_lockISt5mutexEED2Ev
+FUNC WEAK _ZNSt8__detail9_ExecutorIN9__gnu_cxx17__normal_iteratorIPKcNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEEESaINS5_9sub_matchISB_EEENS5_12regex_traitsIcEELb0EE23_M_handle_word_boundaryENSH_11_Match_modeEl
+OBJECT WEAK _ZTIN4cudf6detail18fixed_width_scalarIiEE
+FUNC WEAK _ZNK4cudf2io10datasource17non_owning_buffer4sizeEv
+OBJECT WEAK _ZTINSt6thread11_State_implINS_8_InvokerISt5tupleIJMN6sirius8pipeline14task_schedulerEFvvEPS5_EEEEEE
+OBJECT WEAK _ZTSNSt6thread11_State_implINS_8_InvokerISt5tupleIJMN6sirius8pipeline14task_schedulerEFvvEPS5_EEEEEE
+OBJECT WEAK _ZTSSt19_Sp_counted_deleterIPN4cudf6columnESt14default_deleteIS1_ESaIvELN9__gnu_cxx12_Lock_policyE2EE
+FUNC WEAK _ZNSt6vectorIN4cudf11column_viewESaIS1_EE9push_backERKS1_
+FUNC WEAK _ZNSt19_Sp_counted_deleterIPN4raft13interruptibleENS1_13registry_gc_tESaIvELN9__gnu_cxx12_Lock_policyE2EED1Ev
+OBJECT WEAK _ZTINSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1ELb0EEE
+FUNC WEAK _ZNSt17_Function_handlerIFbcENSt8__detail15_BracketMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1EEEE10_M_managerERSt9_Any_dataRKS8_St18_Manager_operation
+OBJECT UNIQUE _ZZN4cuda8__driver3__424__get_driver_entry_pointEPKciiE18__get_proc_addr_fn
+FUNC WEAK _ZNKSt8__format15__formatter_intIcE6formatInNS_10_Sink_iterIcEEEENSt20basic_format_contextIT0_cE8iteratorET_RS7_
+FUNC WEAK _ZNSt6thread11_State_implINS_8_InvokerISt5tupleIJZN6sirius4exec18static_thread_poolC4EiRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEESt6vectorIiSaIiEEN4absl12lts_2025081412AnyInvocableIDoFvvEEEEUlvE_EEEEED0Ev
+== GNU_UNIQUE exported sample ==
+_ZGVZN6thrust8sequenceINS_6detail22execute_with_allocatorIN3rmm2mr16thrust_allocatorIcEENS_8cuda_cub22execute_on_stream_baseEEEPllEEvRKNS1_21execution_policy_baseIT_EET0_SG_T1_E22__cuda_nvtx3_func_name
+_ZN4cuda3__414__vtable_for_vINS0_7__iset_IJNS_2mr3__423__ibasic_async_resourceIJEEENS4_17__ibasic_resourceIJEEENS4_15__with_propertyINS4_30dynamic_accessibility_propertyEE11__ipropertyIJEEENS9_INS4_17device_accessibleEE11__ipropertyIJEEENS0_11__icopyableIJEEENS0_22__iequality_comparableIJEEEEEEN9cucascade6memory34reservation_aware_resource_adaptorEEE
+_ZZNKSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1ELb1EEclEcE5__nul
+_ZZN4cuda8__driver3__424__get_driver_entry_pointEPKciiE18__get_proc_addr_fn
+_ZZNKSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb0ELb0EEclEcE5__nul
+_ZZN6thrust8tabulateINS_6detail22execute_with_allocatorIN3rmm2mr16thrust_allocatorIcEENS_8cuda_cub22execute_on_stream_baseEEEPlNS_6system6detail7generic6detail22compute_sequence_valueIlEEEEvRKNS1_21execution_policy_baseIT_EET0_SM_T1_E22__cuda_nvtx3_func_attr
+_ZZNKSt7__cxx1112regex_traitsIcE18lookup_collatenameIPKcEENS_12basic_stringIcSt11char_traitsIcESaIcEEET_SA_E14__collatenames
+_ZNSt9__unicode9__v15_1_012__incb_edgesE
+_ZN4cuda3__419__object_metadata_vIN9cucascade6memory34reservation_aware_resource_adaptorEEE
+_ZGVN4raft13interruptible9registry_E
+_ZGVZN6thrust8sequenceINS_6detail22execute_with_allocatorIN3rmm2mr16thrust_allocatorIcEENS_8cuda_cub22execute_on_stream_baseEEEPllEEvRKNS1_21execution_policy_baseIT_EET0_SG_T1_E22__cuda_nvtx3_func_attr
+_ZN4raft13interruptible9registry_E
+_ZGVZN4raft13interruptible9get_tokenEvE1s
+_ZNSt8__detail31__from_chars_alnum_to_val_tableILb0EE5valueE
+_ZZNKSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb1ELb0EEclEcE5__nul
+_ZGVZN6thrust8count_ifINS_6detail22execute_with_allocatorIN3rmm2mr16thrust_allocatorIcEENS_8cuda_cub22execute_on_stream_baseEEENS_17counting_iteratorIlNS_11use_defaultESB_SB_NS_20__compile_time_valueILi1EEEEEN6sirius2op62_GLOBAL__N__5ddff665_24_dense_count_join_impl_cu_bdf662f0_846417presence_positiveIjEEEEN4cuda3std3__415iterator_traitsIT0_vE15difference_typeERKNS1_21execution_policy_baseIT_EESO_SO_T1_E22__cuda_nvtx3_func_name
+_ZGVZN6thrust7copy_ifINS_6detail22execute_with_allocatorIN3rmm2mr16thrust_allocatorIcEENS_8cuda_cub22execute_on_stream_baseEEENS_17counting_iteratorIlNS_11use_defaultESB_SB_NS_20__compile_time_valueILi1EEEEEPlN6sirius2op62_GLOBAL__N__5ddff665_24_dense_count_join_impl_cu_bdf662f0_846417presence_positiveIjEEEET1_RKNS1_21execution_policy_baseIT_EET0_SR_SL_T2_E22__cuda_nvtx3_func_name
+_ZN4raft2mr6detail29default_host_resource_holder_E
+_ZGVZNKSt8__detail11_AnyMatcherINSt7__cxx1112regex_traitsIcEELb0ELb0ELb0EEclEcE5__nul
+_ZZNKSt8__detail9_ExecutorIN9__gnu_cxx17__normal_iteratorIPKcNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEEEESaINS5_9sub_matchISB_EEENS5_12regex_traitsIcEELb0EE10_M_is_wordEcE3__s
+== imports (UND) grouped: libc/libm/pthread vs others; sample of non-versioned imports ==
+
+ZSTD_trace_compress_end
+nvrtcGetCUBINSize@libnvrtc.so.13
+cuFuncSetAttribute
+nvrtcGetProgramLogSize@libnvrtc.so.13
+nvmlDeviceGetHandleByUUID
+cublasLtDestroy@libcublasLt.so.13
+nvrtcGetCUBIN@libnvrtc.so.13
+nvmlDeviceGetMaxMigDeviceCount
+cublasLtMatrixLayoutDestroy@libcublasLt.so.13
+cusparseDestroy@libcusparse.so.12
+cublasLtMatmulAlgoGetHeuristic@libcublasLt.so.13
+cuGetErrorString
+__nvJitLinkGetLinkedCubin_13_3@libnvJitLink.so.13
+nvrtcDestroyProgram@libnvrtc.so.13
+nvmlDeviceGetCount_v2
+nvrtcGetProgramLog@libnvrtc.so.13
+cublasGemmEx@libcublas.so.13
+nvrtcCompileProgram@libnvrtc.so.13
+nvmlDeviceGetMigMode
+ZSTD_trace_compress_begin
+__gmon_start__
+cuLibraryUnload
+cuLibraryGetKernel
+cublasSetStream_v2@libcublas.so.13
+nvmlDeviceGetUUID
+cublasLtMatmulDescCreate@libcublasLt.so.13
+nvmlDeviceIsMigDeviceHandle
+nvrtcGetLTOIR@libnvrtc.so.13
+cusparseSetStream@libcusparse.so.12
+cusparseDestroyDnMat@libcusparse.so.12
+cusparseCreateCsr@libcusparse.so.12
+nvmlDeviceGetHandleByIndex_v2
+cublasLtMatmulDescSetAttribute@libcublasLt.so.13
+cublasLtMatmul@libcublasLt.so.13
+gettid
+cublasLtMatrixLayoutCreate@libcublasLt.so.13
+cublasCreate_v2@libcublas.so.13
+cuLaunchKernel
+_ZN11duckdb_zstd25ZSTD_trace_decompress_endEyPKNS_10ZSTD_TraceE
+nvmlDeviceGetMemoryAffinity
+nvmlDeviceGetDeviceHandleFromMigDeviceHandle
+cublasLtCreate@libcublasLt.so.13
+cusparseDestroySpMat@libcusparse.so.12
+__nvJitLinkCreate_13_3@libnvJitLink.so.13
+__nvJitLinkDestroy_13_3@libnvJitLink.so.13
+__nvJitLinkComplete_13_3@libnvJitLink.so.13
+_ZN11duckdb_zstd27ZSTD_trace_decompress_beginEPKNS_11ZSTD_DCtx_sE
+nvmlDeviceGetName
+cuLibraryLoadData
+nvmlInit_v2
+cusparseGetErrorString@libcusparse.so.12
+__nvJitLinkGetErrorLogSize_13_3@libnvJitLink.so.13
+nvmlDeviceGetPciInfo_v3
+ZSTD_trace_decompress_begin
+ZSTD_trace_decompress_end
+cusparseSDDMM@libcusparse.so.12
+cusparseCreate@libcusparse.so.12
+nvrtcGetLTOIRSize@libnvrtc.so.13
+_ITM_registerTMCloneTable
+== imports count by version tag ==
+    374 @GLIBC_
+    259 @GLIBCXX_
+     43 @CXXABI_
+     14 @GCC_
+     11 @libcublasLt
+     10 @libnvrtc
+     10 @libcusparse
+      8 @libnvJitLink
+      5 @libcublas
+== strings: protobuf/cudf/rmm/nanoarrow version fingerprints ==
+lts_20250814
+== io_uring / numa / dlopen targets ==
+libcuda.so
+libcuda.so.1
+libnvJitLink.so.
+libnvJitLink.so.13
+libnvidia-ml.so.1
+libnvrtc.so.
+libnvrtc.so.13
+== sections (size) ==
+3] 003430
+4] 011530
+.text 50cfe28
+.rodata 16303ec
+.nv_fatbin 1200e618
+.data.rel.ro 124100
+.data 01a930
+.bss 336cd8
+.debug_info 105113
+.symtab a1fb20
+EXIT=0
