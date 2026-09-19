@@ -1,11 +1,11 @@
-# Doris（CPU）vs Doris + Sirius 伪 BE（GPU）· TPC-H SF10 性能对比 · 测试方案
+# Doris（CPU）vs Doris + Sirius 伪 BE（GPU）· TPC-H 性能对比（SF10 跑通，SF100 出主表）· 测试方案
 
 > 状态：**草案，待拍板**（2026-09-19，第十一次 session 末）。拍板后按 §8 执行，结果写 `results.md`。
 > 依赖：MVP-A0 已跑通（SF1 22/22，`../../handoff.md`）。现有机器：AWS `g4dn.2xlarge`（§4）。
 
 ## 0. 目标与非目标
 
-**目标**：同一个 Doris FE、同一份 SF10 parquet、同一批 22 条 TPC-H SQL 下，比较
+**目标**：同一个 Doris FE、同一份 TPC-H parquet（**主表用 SF100，SF10 作跑通与规模点**，§5.0）、同一批 22 条 SQL 下，比较
 
 - **A · Doris 原生**：官方 BE 4.1.4（pipeline 引擎，Doris 默认会话变量，用满机器的 CPU），和
 - **B · Doris + Sirius**：我们的伪 BE 把 FE 派来的 fragment 拼成一棵 Substrait 树交给 Sirius 在 GPU 上跑，
@@ -53,7 +53,7 @@
 | 级 | 机型 | 用途 | 一天费用 |
 |---|---|---|---|
 | **T0（现在）** | g4dn.2xlarge | 把 SF10 全流程（原生 BE、跑批脚本、报告）跑通，出第一版数字，**标注 T4 下限** | $18 |
-| **T1（主结论）** | **g6e.4xlarge**（1× L40S 48 GB，16 vCPU EPYC 7R13，128 GB，600 GB NVMe） | 同机 A vs B：SF10 全部在显存里（2.5 GB parquet → 解码后 ≈10 GB ≪ 43 GB）不降级；Doris 拿 16C/128G，≥ 它自己的"用户常见配置" 16C64G；SF100（≈25 GB parquet）靠 host tier（128 GB × 90%）也能试；数据放本地 NVMe | $72 |
+| **T1（主结论）** | **g6e.4xlarge**（1× L40S 48 GB，16 vCPU EPYC 7R13，128 GB，600 GB NVMe） | 同机 A vs B，**主表 SF100**（parquet ≈25 GB，解码超过显存 → 走 host tier 128 GB × 90%，正是要看的场景），SF10 作"全在显存"的规模点（解码 ≈10 GB ≪ 43 GB）；Doris 拿 16C/128G，≥ 它自己的"用户常见配置" 16C64G，官方 1.2 报告就是这个规格跑 SF100；数据放本地 NVMe | $72 |
 | **T1′（成本对齐）** | 再加一台 **c7i.12xlarge**（48 vCPU / 96 GB，≈$2.1/h ≈ g6e.2xlarge）或 c7i.8xlarge | Doris 原生跑在同价 CPU 机上，得到 Sirius 论文口径的"同价格加速比"；FE 各自一套，数据各放一份 | +$51 |
 | **T2（可选加测：更强 GPU 的可扩展性）** | p5.4xlarge（H100 80 GB）或 g7e.2xlarge（RTX PRO 6000 96 GB） | 同一套脚本**只跑 Sirius 侧（B/R2）**，不重跑 Doris，回答"换更强的卡加速比还能涨多少"——加速比要拿 T1 的 Doris 数字来除，属于跨机估算，报告里注明；g7e 顺便验证 Blackwell（CC 12.0）路径。等 T1 主结论出来再决定花不花这个钱 | $165 / $81 |
 
@@ -101,10 +101,22 @@
 
 ## 5. 数据与基线
 
+### 5.0 规模：SF10 只够跑通，主表要 SF100
+
+| | SF10 | SF100 |
+|---|---|---|
+| 原始 / parquet / lineitem 行数 | 10 GB / ≈2.5 GB / 6000 万 | 100 GB / ≈25 GB / 6 亿 |
+| 别人怎么用 | 开发/回归规模；Doris 1.2 报告用 SF100、3.x 用 SF1000；Sirius 论文单机和 Doris 分布式都用 **SF100**；ClickBench ≈1 亿行 | 单机对比的"公认"规模 |
+| 在 T0（T4 16 GB / 30 GB）上 | 能跑：全部在 page cache；GPU 侧部分查询会 host 降级 | **跑不了**：parquet 25 GB > host pin 16Gi，Doris `mem_limit` 20 GB 也要 spill——数字没有意义 |
+| 在 T1（L40S 48 GB / 128 GB）上 | 全部在显存里（解码 ≈10 GB ≪ 43 GB），引擎时间 ≈100～500 ms/条，**FE 固定开销（100～300 ms）与引擎同量级，加速比被稀释** | lineitem 一张表解码 ≈30 GB，join 中间态超过 43 GB → **走 host tier（128 GB × 90%）**，这正是读者最想看的"数据装不下显存时 GPU 还剩多少优势"；Doris 16C/128G 跑 SF100 很正常（官方 1.2 报告就是 3×16C64G 跑 SF100） |
+| 结论 | **T0 只跑 SF10**（把流程、脚本、报告跑通，出第一版数字，标注 T4）；T1 上 SF10 作为"全在显存"的规模点 | **T1 的主表用 SF100**；SF1000 不做（parquet 250 GB，单节点/单 GPU 没意义，等 MVP-B 多节点） |
+
+SF100 的额外成本：生成 ≈5～10 min（tpchgen-rs，8～16 核）、DuckDB 基线 ≈3～5 min（16 线程 / 128 GB）、Doris 一轮 22 条估 3～10 min、Sirius 一轮 1～3 min，全部配置 4 轮 ≈1.5 h；NVMe 600 GB 放得下。lineitem 单文件 ≈15 GB：Sirius 读单文件没问题，Doris 靠 split 并行也没问题；**若想切多文件（`--parts`），先在 SF1 上验一遍翻译器的多文件 scan range**（`scan_ranges.rs` 未验），再用于 SF100。
+
 - **生成**：`tpchgen-cli -s 10 --format=parquet --parts=1`，布局与 SF1 一致（`<table>/part.0.parquet`，**一表一文件**——翻译器的多文件 scan range 尚未验证，先不引入变量）。≈2.5 GB，本机约 3 min。放 `test_datasets/tpch_parquet_sf10/`（`.git/info/exclude`），软链 **`/tmp/tpch-sf10`**（NVMe 挂上后改软链指向即可）。
 - **row group**：tpchgen 默认 row group 与 Sirius harness 建议的 10M 行不同；先用默认（两边同一份），有余力用 `test/tpch_performance/rewrite_parquet.py` 重写一版做对照（对 Doris 的 split 并行也有影响，两边都要重跑）。
 - **基线**：`validate_tpch_results.py expected --data /tmp/tpch-sf10 --out tests/expected/tpch-sf10`（DuckDB，估 2～5 min；Q11/Q16 大结果 gz）。A、B、R1、R2 的结果**全部**过校验（`--ulps 1`，G-19），校验不过的查询不进性能表。
-- SF1 顺手跑一遍同样流程（已有基线）作为"随规模变化"的第二个点；SF100 只在 T1 机型上考虑（parquet ≈25 GB，生成 ≈30 min，L40S 要靠 host 降级）。
+- SF100 只在 T1 机型上做（§5.0）：`tpchgen-cli -s 100 …` 到 NVMe，基线 `tests/expected/tpch-sf100`（Q11/Q16 结果几百万行，gz 后仍大——基线目录改放 NVMe、不进仓库，只进 `INDEX.md` 的行数与哈希）。SF1 顺手跑一遍（已有基线）作为最小规模点。
 
 ## 6. 公平性规则
 
@@ -143,7 +155,7 @@
 | 7 | **R1 / R2**：`build/release/duckdb`（`SIRIUS_DISABLE=1` = R1，默认 = R2，R2 再加一轮 `pin_table`）各 4 轮，同一批视图 SQL | `log/bench/sf10-duckdb{,-gpu}/` | 15 min |
 | 8 | （可选）**C**：内表灌数（`INSERT INTO SELECT`，SF10 估 10 min）+ `ANALYZE` + 4 轮 | `log/bench/sf10-native-olap/` | 40 min |
 | 9 | 汇总：`scripts/bench-report.py` 从各 `rounds.csv` 出 §11 的表 → `results.md`；同一批脚本再跑一遍 SF1 | `results.md` | 30 min |
-| 10 | **T1**：新机器（g6e.4xlarge）按 `environment.md` 搭环境（pixi 装 + 编引擎 45 min + 原生 BE） → 步骤 1、5～9 重跑；T1′ 的 CPU 机只跑 A | `results.md` 主表 | 半天 |
+| 10 | **T1**：新机器（g6e.4xlarge）按 `environment.md` 搭环境（pixi 装 + 编引擎 45 min + 原生 BE） → 步骤 1、5～9 先用 SF10 重跑（验证环境），再 **SF100 跑一遍出主表**（生成 + 基线 ≈15 min，A/B/B′/R1/R2 各 4 轮 ≈1.5 h）；T1′ 的 CPU 机只跑 A | `results.md` 主表（SF100）+ 规模表（SF1/SF10/SF100） | 一天 |
 
 ## 9. 要新写 / 改的东西（全部在 `experimental/doris/`）
 
@@ -170,11 +182,11 @@
 
 ## 11. 报告模板（`results.md`）
 
-主表（SF10，热跑中位数，ms）：
+主表（**SF100**，热跑中位数，ms；SF10/SF1 同格式作规模表）：
 
 | q | A Doris wall | B′ Sirius wall | **speedup** | B′ engine | R1 DuckDB | R2 Sirius 透明 | 备注（降级 / 校验 / 结果行数） |
 
-辅表：冷跑（A / B / B′ 第 1 轮）、power 总时间、几何平均加速比、每美元加速比（T1′）、SF1 同表；资源表（GPU 峰值、RSS、read_bytes）；环境快照（机型、commit、驱动、配置哈希、`SHOW VARIABLES` 两套、价格）。
+辅表：冷跑（A / B / B′ 第 1 轮）、power 总时间、几何平均加速比、每美元加速比（T1′）、规模表（SF1 / SF10 / SF100 的加速比怎么随规模变、哪些查询在 SF100 上走了 host tier）；资源表（GPU 峰值、RSS、read_bytes）；环境快照（机型、commit、驱动、配置哈希、`SHOW VARIABLES` 两套、价格）。
 
 ## 12. 待用户拍板
 
@@ -185,4 +197,4 @@
 | Q3 | 要不要 T1′ 成本对齐的 CPU 机（c7i.12xlarge ≈$2.1/h） | 要——这是论文口径，也是最难被反驳的口径 |
 | Q4 | 要不要 T2 加测机（p5.4xlarge H100 $6.88/h 或 g7e.2xlarge $3.36/h，只跑 Sirius 侧） | 主结论出来后再定；g7e 有验证 Blackwell 的附带价值 |
 | Q5 | 是否做可选参照 C（Doris 内表） | 做，但放在最后、不进主表；读者一定会问"Doris 主场差多少" |
-| Q6 | 轮次 1 冷 + 3 热够不够；规模 SF10 为主、SF1 顺带、SF100 只在 T1 试 | 够；SF100 看 T1 上 SF10 的降级情况再定 |
+| Q6 | 轮次 1 冷 + 3 热够不够；规模：T0 只跑 SF10（SF100 在 30 GB / 16 GB 机器上没意义），T1 主表 SF100 + SF10 规模点 + SF1 | 够；按 §5.0 |

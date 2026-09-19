@@ -75,7 +75,7 @@ wall − engine ≈ 100–330 ms/条 = FE 规划 + `exec_plan_fragment_prepare/s
 
 ## 下一步
 
-**下一个 session 从「SF10 性能对比」开始**（用户 09-19 拍板；方案 **`experiments/sf10-bench/plan.md`**，已参考 Sirius CIDR'26 论文 / Sirius 仓库 harness / Doris 官方 TPC-H / ClickBench 的口径，含机型建议与 EC2 可购性）。开工顺序：
+**下一个 session 从「Doris vs Doris+Sirius 性能对比」开始**（本机只跑 SF10 把流程跑通；正式主表在 g6e.4xlarge 上用 **SF100**，见方案 §5.0）（用户 09-19 拍板；方案 **`experiments/sf10-bench/plan.md`**，已参考 Sirius CIDR'26 论文 / Sirius 仓库 harness / Doris 官方 TPC-H / ClickBench 的口径，含机型建议与 EC2 可购性）。开工顺序：
 1. 先让用户拍板方案 **§12 的 Q1～Q6**——尤其 Q1（本机 `sudo` 挂实例盘 NVMe，一条命令在 §12 里）和 Q2（正式机型 g6e.4xlarge，要先申请 G 系列 vCPU 配额）；没拍板的按"建议"列默认执行。
 2. 在本机（T0，g4dn）按 **§8 步骤 1～9** 跑通：SF10 数据 + DuckDB 基线 → 官方 BE 4.1.4 落地（`fetch-be.sh` / `be-native.sh` / `conf/be.conf` / `sql/session-native.sql`，`SKIP_CHECK_ULIMIT=true` 绕开 `vm.max_map_count`）→ `bench.sh`（切 BE 等 Alive、1 冷 + 3 热、`evict-cache.py`、采样）→ A / B / B′ / R1 / R2 → `bench-report.py` → `experiments/sf10-bench/results.md`。要新写的文件清单在 **§9**，公平性规则在 **§6**，指标在 **§7**。
 3. 换 T1 机型（g6e.4xlarge）后按 `environment.md` 搭环境，步骤 1、5～9 重跑一遍出主表。
