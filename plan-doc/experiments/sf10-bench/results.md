@@ -17,7 +17,7 @@
 | **B′ `sirius-buffered`** | 同上，`use_odirect: false` 走 page cache（Doris IO 路径的对应物，主表口径） | **40.6**（引擎 37.5） | **3.80×（几何平均 3.01×）** | ≈2.0 |
 | R1 `duckdb` | DuckDB 1.5.5，32 线程，单进程 | **38.9** | 3.97× | ≈23 |
 | R2 `duckdb-gpu` | Sirius 透明路径（DuckDB 规划、同一引擎、O_DIRECT） | 94.6 | 1.63× | ≈1.2 |
-| R2′（附加实验） | 同上但走 page cache（`use_odirect: false`，单独跑的 2 轮，不在报告表里） | 46.5 | 3.32× | — |
+| R2′（附加实验） | 同上但走 page cache（`use_odirect: false`，单独跑的 2 轮，不在报告表里；原始数据 `log/bench-t1/sf100-duckdb-gpu-buffered/`） | 46.5 | 3.32× | — |
 
 冷跑（第 1 轮）合计：A 163.6、A-split 206.8、C 21.3、B 92.9、B′ 55.5、R1 52.0、R2 94.8。GPU 池高水位 **35.6 GiB**（Q9；Q1 29.4、Q4 32.1），在 41.4 GB 的池子里，**HOST/DISK tier 一个批都没落**（telemetry 6036 个批全在 GPU-0，spill 目录空）。
 
