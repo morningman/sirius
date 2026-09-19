@@ -101,16 +101,16 @@ cd /Users/morningman/workspace/git/wt-gpu
 |---|---|
 | 实例 | `g4dn.2xlarge`，us-east-1；Tesla T4 16 GB（CC 7.5 = Sirius 下限）、8 vCPU Xeon 8259CL、30 GB 内存、无 swap |
 | OS / 驱动 | Ubuntu 24.04.4 LTS x86_64，内核 6.17 aws；NVIDIA **580.178.04**，`nvidia-smi` 报 CUDA 13.0；`/proc/sys/kernel/io_uring_disabled = 0`；无系统 CUDA toolkit（全靠 pixi） |
-| 盘 | 根卷 300 GB gp3（`/`，已用 ≈12 GB + 本次 ≈10 GB）；实例盘 `nvme1n1` 209 GB **未分区未挂载**，`/mnt` 空（停机即清；要用需 sudo） |
+| 盘 | 根卷 300 GB gp3（`/`，已用 ≈33 GB：根 pixi env 7.1 + doris default env 5.2 + build 树 2.2 + 其余）；实例盘 `nvme1n1` 209 GB **未分区未挂载**，`/mnt` 空（停机即清；要用需 sudo） |
 | 账户 | `yy2`，**无 sudo**；系统只有 g++ 13.3 / make / git / python 3.12，**没有** cmake、ninja、unzip、java、gh、docker、rustup |
 | pixi | 0.81.0，`~/.pixi/bin`（`~/.bashrc` 已加 PATH）；包缓存 `~/.cache/rattler` |
-| 仓库 | `/home/yy2/gpu/sirius`，`origin` = fork `morningman/sirius`，分支 `experimental-doris`；submodule 已拉：`experimental/doris/doris`（4.1.4）、`substrait`（浅）；**`duckdb`/`cucascade`/`vcpkg` 未拉，根 pixi 环境未装，引擎未编** |
-| `experimental/doris/` | `.pixi/envs/{be,fe,check}` 已装；`.doris-fe/fe` = 官方 4.1.4；`.duckdb-substrait/`（DuckDB 1.5.5 + substrait 扩展，≈2 GB）已编；`target/` debug 已编 |
+| 仓库 | `/home/yy2/gpu/sirius`，`origin` = fork `morningman/sirius`，分支 `experimental-doris`；submodule 已拉（都浅）：`experimental/doris/doris`（4.1.4）、`substrait`、`duckdb`、`cucascade`（`vcpkg` 不需要，没拉）；根 pixi 环境 `.pixi/envs/default` 已装（CUDA 13 + RAPIDS 26.08 + clang 21）；**引擎已编**：`build/release/extension/sirius/{sirius.duckdb_extension, libsirius.so.0.0.0}`（09-19，45 min；改引擎代码后 `pixi run make TEST_BUILD_TARGET=` 增量） |
+| `experimental/doris/` | `.pixi/envs/{be,fe,check,default}` 已装（`default` 含 `engine` 特性，是引擎路径 BE 的编译/运行环境）；`.doris-fe/fe` = 官方 4.1.4；`.duckdb-substrait/`（DuckDB 1.5.5 + substrait 扩展，≈2 GB）已编；`target/debug`（无引擎）和 `target/release`（链 `libsirius.so.0`）都已编；`conf/sirius.yaml` 是本机的引擎配置 |
 | 数据 | `test_datasets/tpch_parquet_sf1/`（tpchgen-rs，246 MB，`<table>/part.0.parquet`；本机 `.git/info/exclude`），软链 **`/tmp/tpch-sf1`**（开机清 `/tmp`，重建：`ln -sfn /home/yy2/gpu/sirius/test_datasets/tpch_parquet_sf1 /tmp/tpch-sf1`）；生成器 `test_datasets/tpchgen-rs/target/release/tpchgen-cli` |
-| 进程 | FE：`pixi run -e fe fe-start|fe-stop`，`scripts/fe.sh status`；BE：`pixi run -e be bash scripts/be.sh start|stop|log`（`log/be.pid`）；客户端 `.pixi/envs/fe/bin/mysql -h127.0.0.1 -P9030 -uroot -E`（`\G` 在 9.7 客户端里不能用） |
+| 进程 | FE：`pixi run -e fe fe-start|fe-stop`，`scripts/fe.sh status`；BE 引擎路径：**`pixi run bash scripts/be.sh start --engine`**（default 环境；缺省 `--sirius-config conf/sirius.yaml`）；BE 无引擎（translate-only）：`pixi run -e be bash scripts/be.sh start`；`be.sh stop|log`（`log/be.pid`）；客户端 `.pixi/envs/fe/bin/mysql -h127.0.0.1 -P9030 -uroot -E`（`\G` 在 9.7 客户端里不能用） |
 
-**能做什么**：Mac 能做的全部 + 编 Sirius 引擎 + 引擎路径 BE + GPU 差分 + 性能测量（T4 数字不代表 L40S）。三层验证（A0.4-0）已过，见 `handoff.md`。
-**内存约束**：Sirius 默认 pin 90% 内存做 host tier，30 GB 机器上 BE 必须带 `--sirius-config` 把 `host.capacity_bytes` 限到 ≈12Gi（`doris-pseudo-be-plan.md` §4.2）。
+**能做什么**：Mac 能做的全部 + 编 Sirius 引擎 + 引擎路径 BE + GPU 差分 + 性能测量（T4 数字不代表 L40S）。三层验证（A0.4-0）和引擎路径（A0.4）都已过，见 `handoff.md`。
+**内存约束**：Sirius 默认 pin 90% 内存做 host tier，30 GB 机器上 BE 必须带 `--sirius-config` 把 `host.capacity_bytes` 限到 ≈12Gi（`doris-pseudo-be-plan.md` §4.2）——已固化在 `experimental/doris/conf/sirius.yaml`（GPU 90%、host 12Gi、spill `log/sirius-spill` 100Gi、Quent 遥测 `log/telemetry`），`be.sh start --engine` 缺省就用它。
 
 ## Sirius 侧（只读参考期）
 

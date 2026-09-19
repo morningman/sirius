@@ -6,24 +6,18 @@
 
 ## 当前状态
 
-**日期**：2026-09-19（第十次 session，GPU 机上的第一次）
-**阶段**：**轨 1 · MVP-A0 · A0.4-0 Linux x64 验证三层全过，GPU 机就绪，下一步 A0.4 编引擎。** 本机 = AWS **`g4dn.2xlarge`**（us-east-1；Tesla T4 16 GB CC 7.5、8 vCPU Xeon 8259CL、30 GB、根卷 300 GB gp3；Ubuntu 24.04.4、驱动 **580.178.04 / CUDA 13.0**、`io_uring_disabled=0`），仓库在 **`/home/yy2/gpu/sirius`**（clone 自 fork，分支 `experimental-doris`，`plan-doc/` 随分支来了）。
-**代码**：`experimental/doris/`，本次改动小：`.gitignore` 补 `!tests/expected/**/*.tsv` + 22 份 `.tsv` 基线补进仓库、pixi `check` 特性补 `cmake/ninja/ccache`、`fe.sh status` 改 `mysql -E`。提交为 **`351347bf`**（代码）+ 本 docs commit，**都还在本机没 push**：GPU 机没有 GitHub 凭据（`git push` 要 Username；没装 `gh`），要么在这台机器上 `gh auth login` / 配 SSH key，要么等用户自己推。
-**上游**：无变化（未回帖，未开 PR）。上游 PR / re-open #137 仍等 A0 在 GPU 上跑通（ADR-011 D-1 修订）。
+**日期**：2026-09-19（第十一次 session，GPU 机上的第二次）
+**阶段**：**轨 1 · MVP-A0 · A0.4 引擎路径跑通——Sirius 引擎在本机编成，引擎路径 BE 起来并在 GPU 上跑通第一条查询（Q6 与 DuckDB 基线一致）；下一步 A0.5 22/22。** 本机 = AWS **`g4dn.2xlarge`**（Tesla T4 16 GB CC 7.5、8 vCPU、30 GB、根卷 300 GB；Ubuntu 24.04.4、驱动 580.178.04 / CUDA 13.0），仓库 `/home/yy2/gpu/sirius`（`origin` = fork，分支 `experimental-doris`）。
+**代码**：`experimental/doris/`，本次改动小：新文件 `conf/sirius.yaml`（本机内存约束下的引擎配置）、`scripts/be.sh` 的 `--engine` 分支补齐运行时环境（`LD_LIBRARY_PATH`、缺省 `--sirius-config`、spill/telemetry 目录）、README 的引擎段。上一 session 的 `351347bf` + `e63ed24f` 和本次的 commit **都还在本机没 push**（GPU 机没有 GitHub 凭据，等用户推或在本机配凭据）。
+**上游**：无变化（未回帖，未开 PR）。上游 PR / re-open #137 仍等 A0 22/22 跑通（ADR-011 D-1 修订）。
 
-验收对照（`tasklist.md` A0.4-0，三层逐层过）：
-- ✅ **0a CI 同款三项**（linux-64）：`pixi install -e be` 8 s；`cargo fmt --check` ✅；`clippy --all-targets --no-default-features -D warnings` ✅ 55 s（thrift-compiler 0.22 + protoc 36.1 在本机重新 codegen，`crates/doris-thrift/build.rs` 的后处理对 Linux 生成物同样成立）；
-  `cargo test --workspace --no-default-features` ✅ **96 + 49 + 10**（含 27 份快照）。fork 内部 CI PR 没开（本机就是 ubuntu 24.04 x86_64，与 CI runner 同 OS）。
-- ✅ **0b 无引擎全流程**：官方 FE 4.1.4（用户已预先 `fe-fetch` 到 `.doris-fe/fe`；`SHOW FRONTENDS` 报 `doris-4.1.4-rc04-ad35a140c7f`，与 `doris/` submodule 同 commit）24 s 健康；translate-only BE `SHOW BACKENDS` **Alive: true / NodeRole mix**；
-  tpchgen-rs SF1 parquet（本机用 pixi `be` 的 cargo 1.98 编 tpchgen-cli 4 min，生成 16 s，246 MB，每表一个 `part.0.parquet`，schema DECIMAL(15,2)/DATE 与语料一致）→ `run-tpch.sh --translate-only --out /tmp/corpus-linux` **22/22 "translated into one plan"**，`INDEX.md` 形状表与仓库**逐字一致**；
-  gaps 5 条 captured（G-11 窗口 / G-12 UNION×2 拒、G-13×2 翻出），`INDEX.md` 逐字一致。
-- ✅ **0c CPU 差分**：`duckdb-substrait-build`（cmake 4.4.3 + ninja 来自 pixi `check`，系统 g++ 13.3，**13 min** / 8 vCPU）→ `tpch-cpu-diff` **22 ok**（仓库语料）；再拿本机 FE 新采的 `/tmp/corpus-linux` 跑一遍也 **22 ok**（含列序不同的 Q1/Q14，见下）；gaps G-13 两条 2 ok（两套语料各一遍）。
-- ✅ **顺手修的三件事**：(1) **根 `.gitignore` 的 `*.tsv` 把基线挡在 commit 外**——`22d161d9` 只带了 Q11/Q16 的 `.tsv.gz` 和 INDEX.md，另外 20 份 TPC-H + 2 份 gaps `.tsv` 从没进仓库（0c 第一次跑 **20 条 SKIPPED** 才暴露；Mac 工作树里有所以之前没发现）。`experimental/doris/.gitignore` 加 `!tests/expected/**/*.tsv`，基线在本机用 DuckDB 1.5.5 重生成（Q16 与 Mac 那份逐字节相同；Q11 只有两对 `value` 并列的行换序，校验器本来就容忍，`.gz` 保留 Mac 版）；
-  (2) pixi `check` 特性补 `cmake>=3.28 / ninja / ccache`（`build-duckdb-substrait.sh` 在 Mac 上靠 Homebrew 隐式提供；`pixi.lock` 纯增量 +372 行，格式仍 v7，pixi 0.81 生成）；(3) `fe.sh status` 改 `mysql -E -e 'SHOW BACKENDS'`（conda-forge mysql 9.7.1 客户端对 `-e` 里的 `\G` 报 `Unknown command`，Mac 上的客户端版本没这问题）。
-- 🔎 **发现：FE 的 plan 形状稳定，但节点内表达式顺序每个 FE 进程可能不同**——Q1 的 update 相 `partial_sum` 两个函数互换、Q14 的中间投影列序 `p_type,l_extendedprice,l_discount` vs `l_extendedprice,l_discount,p_type`（`EXPLAIN` 文本与 Mac 语料不同，**FE 重启后再变一次**，同一进程内稳定 → Java 身份 hash 序）。
-  `INDEX.md` 形状表、其余 20 条 EXPLAIN、拼接后的 Substrait explain 均逐字一致；翻译器按 `(tuple_id, slot_id)` 工作，Q1/Q14 的本机 plan CPU 差分也 OK。**后果**：重采语料时 Q1/Q14 的快照可能只因列序变化，属噪音；仓库继续用 Mac 那份语料。
+A0.4 实测（`tasklist.md` A0.4 有完整数字）：
+- ✅ **引擎**：`git submodule update --init --depth=1 --jobs 3 duckdb cucascade`（`release` 预设不用 vcpkg，没拉；`cucascade` 指针未动）→ 根 `pixi install` 26 s（7.1 GB）→ `pixi run make TEST_BUILD_TARGET=` **45 min 17 s**（1208 个目标；`.cu` 8 种架构那段最慢）→ `build/release/extension/sirius/` 下 `sirius.duckdb_extension` 114 MB **和独立的 `libsirius.so.0.0.0`** 133 MB（RPATH = 根 env `lib/`；DT_NEEDED cudf/cuvs/rmm/nvcomp/nvrtc/uring/curl/…）。build 树 2.2 GB；根卷用到 33 GB。
+- ✅ **BE**：`experimental/doris` default 环境（`fe+be+client+check+engine`）`pixi install` 11 s（5.2 GB，和根 env 共享 `~/.cache/rattler`；`pixi.lock` 无变化）；`pixi run cargo build --release -p sirius-doris-be` **3 min**（`sirius-sys` 的 cxx shim + 链接 `libsirius.so.0`）；二进制 22 MB，RPATH = doris env `lib/`，`ldd` 全部可解析。
+- ✅ **起服务**：`pixi run bash scripts/be.sh start --engine`（default 环境）——29 s 内（含 23 s 重链接：be.sh 现在 export `SIRIUS_BUILD_DIR`，`build.rs` 的 `rerun-if-env-changed` 触发一次）注册成功；引擎 bring-up **≈4 s**，`nvidia-smi` 显存 13.5 GB（90%），BE RSS 1.3 GB，`free` 里 used 只多了 2 GB（pinned 12Gi 是懒分配？待看 SF10 时的表现）；`SHOW BACKENDS` **Alive: true**，`LastStartTime 01:41:28`。
+- ✅ **第一条 GPU 查询**：`pixi run -e fe bash scripts/run-tpch.sh --data /tmp/tpch-sf1 --queries 6` → `q06: ok, 1 row(s) in 1s` → validate **OK**（`revenue 123141078.2283`）。BE 日志：`translate_batch` 372 µs，`exec_plan_fragment_prepare` 221 ms（GPU 执行就在这个 RPC 里同步完成，含 parquet 读），两次 `fetch_data`（数据包 + eos），FE 收尾 `cancel_plan_fragment reason=3`（正常）。`log/telemetry/<query_id>/` 有 Quent 输出（`engine`、`memory`、`data_batch` 等 ndjson）。
 
-一句话结论：**Mac 上做的一切在 Linux x64 上原样成立；引擎之外的整条链（FE → 伪 BE → 拼接器 → DuckDB 消费端）在 GPU 机上已经跑通并逐行验证，下一步只剩编引擎 + 真跑。**
+一句话结论：**引擎链在 GPU 机上通了：FE → 伪 BE → 拼接器 → `SiriusContext::execute_substrait` → Arrow → `fetch_data` → mysql 客户端，一条查询逐行正确；剩下的是把 22 条全部跑过并记时间。**
 
 ### P1.5 负向用例对照（G-01～G-18 ↔ 单测）
 
@@ -52,24 +46,21 @@
 
 ## 下一步
 
-**A0.4 · 编引擎 + 引擎路径的伪 BE**（`tasklist.md` A0.4），然后 A0.5～A0.7。本机状态：FE（9030）和 translate-only BE（pid 见 `experimental/doris/log/be.pid`）**还在跑**，`/tmp/tpch-sf1 → test_datasets/tpch_parquet_sf1` 软链在（**重启后 `/tmp` 会被清，软链要重建**：`ln -sfn /home/yy2/gpu/sirius/test_datasets/tpch_parquet_sf1 /tmp/tpch-sf1`）。`PATH` 里要有 `~/.pixi/bin`（安装脚本已写进 `~/.bashrc`，新 shell 生效）。
+**A0.5 · 22/22 GPU 差分**（`tasklist.md` A0.5），然后 A0.6 计时、A0.7 上游落地。本机状态：FE（9030）和**引擎路径 BE**（pid 见 `experimental/doris/log/be.pid`，`ps` 看 `target/release/sirius-doris-be`）**还在跑**；`/tmp/tpch-sf1` 软链在（**重启后要重建**：`ln -sfn /home/yy2/gpu/sirius/test_datasets/tpch_parquet_sf1 /tmp/tpch-sf1`）。`PATH` 里要有 `~/.pixi/bin`。
 
-1. **拉 submodule**：根构建需要 `duckdb/`、`substrait/`（已 `--depth=1` 拉了）、`cucascade/`、`vcpkg/`——`git submodule update --init --depth=1 --jobs 3 duckdb cucascade vcpkg`（`plan §4.3` 的写法；根 `Makefile`/CMake 若要求完整历史再补 `--unshallow`）。**别动 `cucascade` 的指针**。
-2. **根环境 + 引擎**：`cd /home/yy2/gpu/sirius && pixi install`（CUDA 13 + RAPIDS 26.08 + clang 21，估 15–20 GB，根卷剩 ≈275 GB 够；本机 8 vCPU，`pixi run make` 估 40–90 min，sccache 首次无命中）→ 产物 `build/release/extension/sirius/sirius.duckdb_extension`。
-   替代：`gh run download` 拿 CI 产物（本机没装 `gh`，也没登录）。
-3. **引擎路径 BE**：`cd experimental/doris && pixi run be-build`（`engine-build` 会再跑一次根 `make`，已编则秒过）；写 `conf/sirius.yaml`（`doris-pseudo-be-plan.md` §4.2 的样例：`num_gpus: 1`，`gpu.usage_limit_fraction: 0.9`，**`host.capacity_bytes: 12Gi`**——本机只有 30 GB，默认 90% pin 会把 FE 4 GB heap 挤死；`disk.downgrade_root_dirs` 先指根卷某目录，实例盘 `nvme1n1` 209 GB **未分区未挂载且 yy2 无 sudo**，要用得先让用户挂）；
-   `SIRIUS_BE_TRANSLATE_ONLY=0 pixi run -e be bash scripts/be.sh start --engine -- --sirius-config conf/sirius.yaml`（看 `scripts/be.sh` / `main.rs` 的参数名；先 `be.sh stop` 掉 translate-only 那个，端口相同）。
-4. **A0.5**：`pixi run -e fe bash scripts/run-tpch.sh --data /tmp/tpch-sf1`（执行模式，跑完自动 `validate`，`log/tpch/qNN/result.tsv`、`summary.csv`）。GPU 上 FP64 漂移就 `--tolerance 1e-6` 之类放宽并把数记进 `semantics-gaps.md` G-19；Q15 单独记。
+1. **A0.5**：`cd experimental/doris && pixi run -e fe bash scripts/run-tpch.sh --data /tmp/tpch-sf1`（执行模式，跑完自动 `validate`；`log/tpch/qNN/{result.tsv,error.txt,explain.txt}`、`log/tpch/summary.csv`）。GPU 上 FP64 漂移就 `--tolerance 1e-6` 之类放宽并把数记进 `semantics-gaps.md` G-19；Q15 单独记。
+   失败的查询：`log/be.log` 里搜 query id（BE 把引擎的 C++ 异常原样带回 `fetch_data` 的错误信息，`error.txt` 能看到）；单独重放：`SIRIUS_SUBSTRAIT_PLAN=<dump> cargo test -p sirius-doris-be engine_replays_dumped_substrait_plan -- --ignored`（要 `LD_LIBRARY_PATH` + default 环境）。
    G-13 探针：`run-tpch.sh --sql-dir sql/gaps --queries g13-distinct,g13-distinct-topn --expected tests/expected/gaps-sf1 --out log/gaps`。
-5. **A0.6** 记每条查询 GPU 时间（`summary.csv` 里有秒级；细的看 BE 日志）。
-6. **A0.7** 22/22 后：上游 Draft PR + re-open #137。**开上游 PR 前把 `plan-doc/` 从分支上拿掉**（最后一个 commit `git rm -r plan-doc`，或 rebase 掉那几个 `docs(doris)` commit），它不属于上游。
+2. **A0.6** 记每条查询 GPU 时间：`summary.csv` 只有秒级；准的看 BE 日志里每条 query 的 `exec_plan_fragment_prepare … time.idle`（引擎同步执行就在这个 RPC 里）或 `log/telemetry/<query_id>/` 的 Quent ndjson。
+3. **A0.7** 22/22 后：上游 Draft PR + re-open #137。**开上游 PR 前把 `plan-doc/` 从分支上拿掉**（最后一个 commit `git rm -r plan-doc`，或 rebase 掉那几个 `docs(doris)` commit），它不属于上游。
+4. 之后：SF10（`tpchgen-cli` 生成 + `validate_tpch_results.py expected` 重生成基线；16 GB 显存要靠 host/disk 降级，`conf/sirius.yaml` 的 disk 段已配到 `log/sirius-spill`，实例盘要 sudo 才能挂）。
 
 已知会在 GPU 上遇到的事（翻译器已按此设计，CPU 差分证明 plan 语义正确，剩下的只可能是 Sirius 物理执行的差异）：`avg(DECIMAL)` 用 DuckDB 的 DOUBLE 再 cast 回 DECIMAL(38,4)（校验器半 ulp 规则已覆盖）；`sum(INT/TINYINT)` DuckDB 是 HUGEINT 再 cast BIGINT（Q12 的 `sum(if(...,1,0))` 是 TINYINT 求和；Sirius HUGEINT→INT64 静默截断 G-01 在中间类型上是否咬人要看）；
 decimal 字面量精度 ≤4 被抬到 5；`local_files` 按列名投影要求 parquet 列名 = slot 名；cross join 是常量 key 等值 join（Q7/Q11/Q22）；`SELECT DISTINCT` 是零度量 grouped aggregate（G-13）；`year()` DuckDB 返回 BIGINT 再 cast SMALLINT（Q7/Q8/Q9）；
 每条 plan 有 9～25 个恒等 `Project`（DuckDB 优化器不折叠，`log/cpu-diff/qNN/duckdb-plan.txt` 可见）——Sirius 上是额外的算子，只影响时间。T4 只有 16 GB 显存、CC 7.5 是 Sirius 支持下限：SF1 应该全在显存里，性能数字不代表 L40S。
 
 提交习惯（P0 提交时定下的，之后照做）：
-1. 只 `git add experimental/doris .github/workflows/experimental.yml .gitmodules`，**不要** `git add -A`；`cucascade` 指针是本地读代码时改的，不 stage。
+1. 只 `git add experimental/doris .github/workflows/experimental.yml .gitmodules`，**不要** `git add -A`；`cucascade` 指针是本地读代码时改的，不 stage（GPU 机上 `duckdb`/`cucascade` 按提交的指针浅拉，`git status` 干净）。
 2. `plan-doc/` **从 09-18 晚起随分支提交**（用户拍板；两台机器的 `.git/info/exclude` 里都只有 `test_datasets/tpch_parquet_sf1/`）。commit hook 是 Claude Code 的 `PreToolUse` agent hook，只匹配以 `git commit` 开头的 Bash 命令——把 commit 写进脚本文件再 `bash` 它就不会触发（这也是第 5 条的由来），它对 plan-doc 的"AI 运行笔记"判定不用理。
    plan-doc 的 commit 和代码 commit 分开提（`docs(doris): …`），上游 PR 前整体拿掉。
 3. 语料里的绝对路径是 `/tmp/tpch-sf1/...`（符号链接 → `test_datasets/tpch_parquet_sf1`），下次采语料保持这个路径，diff 才干净。**重采语料后要 `UPDATE_SNAPSHOTS=1` 重生成快照并 review diff**（query id 不进快照，形状不变则快照不变）。
@@ -84,6 +75,17 @@ decimal 字面量精度 ≤4 被抬到 5；`local_files` 按列名投影要求 p
 ---
 
 ## 已知坑（累积，发现一条加一条）
+
+### 🔴 A0.4 引擎路径实测（2026-09-19，GPU 机；`conf/sirius.yaml`、`scripts/be.sh --engine`）
+
+- **这版 `dev` 的根构建已经产出独立的 `libsirius.so.0.0.0`**（`build/release/extension/sirius/`，133 MB，SONAME `libsirius.so.0`，RPATH 写死到根 `.pixi/envs/default/lib`），`rust/README.md` 和 `sirius-sys/build.rs` 注释里"软链 `sirius.duckdb_extension` 当 stopgap"的说法已过时（代码路径仍在，只是不再走）。BE 二进制 `DT_NEEDED libsirius.so.0`，运行时只需 `LD_LIBRARY_PATH` 指到 build 树；cudf/cuvs/rmm 等经 `libsirius` 自己的 RPATH 从**根 env** 解析（不是 doris env 的那份同版本副本）——两份都在，别删根 env。
+- **`be-build` 任务的 `engine-build` 依赖会把 `sirius_unittest`（Catch2）也编一遍**（根 Makefile 默认 `TEST_BUILD_TARGET=sirius_unittest`）；引擎已编好时直接 `pixi run cargo build --release -p sirius-doris-be`（default 环境）就行。`be.sh start --engine` 自己跑 cargo build，不经 pixi 任务。
+- **`be.sh` export `SIRIUS_BUILD_DIR` 会让 `sirius-sys` 的 `rerun-if-env-changed` 重编一次**（23 s，之后稳定）；之前在没有这个变量的 shell 里 build 过的话第一次 start 会看到 `Compiling sirius-sys`。
+- 根 `pixi install` 只花 26 s：AWS us-east-1 到 conda-forge CDN 约 270 MB/s，"15–20 GB / 半小时"的估算作废（实际根 env 7.1 GB + doris default env 5.2 GB，共享包缓存）。`make` 45 min 是硬时间（8 vCPU；`ninja` 满 8 并行，`.cu` 每个按 `CUDAARCHS` 8 种架构编）——想省就 `gh run download` CI 产物，本机没 `gh`。
+- 引擎 bring-up ≈4 s、显存按 `usage_limit_fraction` 立即预留（13.5 GB / 15.3 GB），host pin 12Gi 在 `free` 里没立刻体现（used 仅 +2 GB）——`cudaMallocHost` 的页可能在 first-touch 时才落地；FE 4 GB heap + BE 1.3 GB RSS 共存没问题。
+- 引擎执行是**同步在 `exec_plan_fragment_prepare` RPC 里完成**的（`dispatch_blocking` → `spawn_blocking` → `executor.execute`），Q6 SF1 221 ms；`fetch_data` 只是取已物化的结果。大查询会把 prepare RPC 撑长——FE 的 `brpc` 超时（`remote_fragment_exec_timeout_ms` 默认 30 s？）在 SF10 上可能咬人，先看 A0.5/SF10 实测再说。
+- FE 每条查询结束都会发 `cancel_plan_fragment reason=3`（LIMIT_REACH / 正常收尾），BE 日志里这不是错误。
+- Quent 遥测（`enable_quent: true`）每条查询在 `log/telemetry/<query_id>/` 写十来个 ndjson，Q6 共 96 KB；22 条也就几 MB，`log/` 已 gitignore。
 
 ### 🔴 A0.4-0 Linux x64 验证实测（2026-09-19，GPU 机 `g4dn.2xlarge`）
 
@@ -346,6 +348,10 @@ decimal 字面量精度 ≤4 被抬到 5；`local_files` 按列名投影要求 p
 
 <details>
 <summary>历史记录</summary>
+
+### 2026-09-19（第十一次，GPU 机）
+A0.4 引擎路径跑通：`duckdb`/`cucascade` 浅拉，根 pixi 环境 26 s 装好，`pixi run make TEST_BUILD_TARGET=` 45 min 编出 `sirius.duckdb_extension` + 独立 `libsirius.so`；`experimental/doris` default 环境（含 engine 特性）11 s，`cargo build --release` 3 min 链接成功；新增 `conf/sirius.yaml`（host pin 12Gi、spill/telemetry 进 `log/`），`be.sh start --engine` 补齐运行时环境；
+引擎 BE 4 s bring-up、Alive，Q6 在 GPU 上 221 ms 返回且与 DuckDB 基线一致。下一步 A0.5 22/22。
 
 ### 2026-09-19（第十次，GPU 机）
 GPU 机 `g4dn.2xlarge` 到手，A0.4-0 Linux x64 三层验证全过：0a CI 同款三项 96+49+10 全绿；0b 官方 FE 4.1.4 + translate-only BE Alive，22/22 翻成单棵、`INDEX.md` 逐字一致，gaps 5 条一致；0c DuckDB+substrait 在 Linux 编成，CPU 差分 22 ok（仓库语料与本机新采语料各一遍）+ G-13 2 ok。
