@@ -42,7 +42,7 @@
 | **g6e.4xlarge** | L40S · 48 GB · 864 GB/s · CC 8.9 | **16 / 128 GB** | 600 GB | **3.004** | **推荐主机型**（§2.2） |
 | g6e.8xlarge | L40S · 48 GB | 32 / 256 GB | 900 GB | ≈4.5（待核） | Doris 侧对齐官方报告的 32C 规格时用 |
 | g7e.2xlarge | RTX PRO 6000 Blackwell SE · 96 GB GDDR7 · ≈1.6 TB/s · CC 12.0 | 8 / 64 GB | 有（待核） | 3.363 | 2026-01 GA，**仅 us-east-1 / us-east-2**；Sirius `CUDAARCHS` 含 `120a/120` 但我们没在 Blackwell 上验证过 |
-| p5.4xlarge | H100 · 80 GB HBM3 · 3.35 TB/s · CC 9.0 | 16 / 256 GB | 有（待核） | 6.880 | 头条数字用；P 系列配额单独申请 |
+| p5.4xlarge | H100 · 80 GB HBM3 · 3.35 TB/s · CC 9.0 | 16 / 256 GB | 有（待核） | 6.880 | T2 加测（只跑 Sirius 侧）；P 系列配额单独申请 |
 | c7i.8xlarge（CPU 对照） | — | 32 / 64 GB | — | 1.428 | ≈ g6e.2xlarge 的 2/3 价 |
 | c7i.12xlarge（CPU 对照） | — | 48 / 96 GB | — | ≈2.14 | ≈ g6e.2xlarge 同价（论文口径） |
 
@@ -55,7 +55,7 @@
 | **T0（现在）** | g4dn.2xlarge | 把 SF10 全流程（原生 BE、跑批脚本、报告）跑通，出第一版数字，**标注 T4 下限** | $18 |
 | **T1（主结论）** | **g6e.4xlarge**（1× L40S 48 GB，16 vCPU EPYC 7R13，128 GB，600 GB NVMe） | 同机 A vs B：SF10 全部在显存里（2.5 GB parquet → 解码后 ≈10 GB ≪ 43 GB）不降级；Doris 拿 16C/128G，≥ 它自己的"用户常见配置" 16C64G；SF100（≈25 GB parquet）靠 host tier（128 GB × 90%）也能试；数据放本地 NVMe | $72 |
 | **T1′（成本对齐）** | 再加一台 **c7i.12xlarge**（48 vCPU / 96 GB，≈$2.1/h ≈ g6e.2xlarge）或 c7i.8xlarge | Doris 原生跑在同价 CPU 机上，得到 Sirius 论文口径的"同价格加速比"；FE 各自一套，数据各放一份 | +$51 |
-| **T2（上限/头条，可选）** | p5.4xlarge（H100 80 GB）或 g7e.2xlarge（RTX PRO 6000 96 GB） | 同一套脚本只跑 B/R2，回答"换更强的卡加速比怎么变"；g7e 顺便验证 Blackwell 路径 | $165 / $81 |
+| **T2（可选加测：更强 GPU 的可扩展性）** | p5.4xlarge（H100 80 GB）或 g7e.2xlarge（RTX PRO 6000 96 GB） | 同一套脚本**只跑 Sirius 侧（B/R2）**，不重跑 Doris，回答"换更强的卡加速比还能涨多少"——加速比要拿 T1 的 Doris 数字来除，属于跨机估算，报告里注明；g7e 顺便验证 Blackwell（CC 12.0）路径。等 T1 主结论出来再决定花不花这个钱 | $165 / $81 |
 
 **为什么主机型是 g6e.4xlarge 而不是 2xlarge**：同机对比里 Doris 只能用 GPU 实例自带的 vCPU，8 vCPU 会让 A 明显弱于任何真实 Doris 部署，读者会质疑；16 vCPU/128 GB 让 A 至少是 Doris 自己认的常见单 BE 规格，同时显存/主机内存对 SF10 都有 3～4 倍余量。多花的 $0.76/h 买的是结论的可信度。
 
@@ -183,6 +183,6 @@
 | Q1 | 现在这台是否 sudo 挂载实例盘 NVMe（`sudo mkfs.ext4 /dev/nvme1n1 && sudo mkdir -p /mnt/nvme && sudo mount /dev/nvme1n1 /mnt/nvme && sudo chown yy2 /mnt/nvme`；停机即清，数据 3 min 可重生成） | **挂**——否则冷跑和 Sirius 默认 O_DIRECT 路径都只反映 EBS |
 | Q2 | 正式数字用哪台：g6e.4xlarge（推荐，$3/h）还是 g6e.2xlarge（$2.24/h，Doris 只有 8 vCPU） | **g6e.4xlarge**；先申请 G 系列 vCPU 配额 ≥ 32 |
 | Q3 | 要不要 T1′ 成本对齐的 CPU 机（c7i.12xlarge ≈$2.1/h） | 要——这是论文口径，也是最难被反驳的口径 |
-| Q4 | 要不要 T2 头条机（p5.4xlarge H100 $6.88/h 或 g7e.2xlarge $3.36/h） | 主结论出来后再定；g7e 有验证 Blackwell 的附带价值 |
+| Q4 | 要不要 T2 加测机（p5.4xlarge H100 $6.88/h 或 g7e.2xlarge $3.36/h，只跑 Sirius 侧） | 主结论出来后再定；g7e 有验证 Blackwell 的附带价值 |
 | Q5 | 是否做可选参照 C（Doris 内表） | 做，但放在最后、不进主表；读者一定会问"Doris 主场差多少" |
 | Q6 | 轮次 1 冷 + 3 热够不够；规模 SF10 为主、SF1 顺带、SF100 只在 T1 试 | 够；SF100 看 T1 上 SF10 的降级情况再定 |
