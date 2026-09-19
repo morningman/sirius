@@ -6,25 +6,24 @@
 
 ## 当前状态
 
-**日期**：2026-09-18（第九次 session，晚）
-**阶段**：**轨 1 · MVP-A0 的 Mac 侧准备（A0.1～A0.3）全部完成，GPU 机可以买了。** 已提交为 **`22d161d9`** 并推到 `fork/experimental-doris`（51 文件 +1950/−424；`cucascade` 指针照旧不 stage）。
-**`plan-doc/` 从下一个 commit 起随 `experimental-doris` 分支一起提交**（用户 09-18 晚拍板：fork 是 public 也无妨；已从本机 `.git/info/exclude` 移除），GPU 机 clone 分支就能拿到全部规划文档。
-**Linux x64 上一次都没验过**（本机是 macOS arm64；用户决定不在 Mac 上用 CI/Docker 验，**作为 GPU 机上的第一件事**，见「下一步」第 0 步）。
-**代码**：`experimental/doris/`，本次新增 `scripts/{build-duckdb-substrait.sh,validate_tpch_results.py,cpu-diff.sh}`、`tests/expected/{tpch-sf1,gaps-sf1}/`、pixi `check` 特性；改 `dump-fragments`、`run-tpch.sh`、`stitcher.rs`、`node_translator.rs`、17 份快照、5 条 gaps 语料重采。
+**日期**：2026-09-19（第十次 session，GPU 机上的第一次）
+**阶段**：**轨 1 · MVP-A0 · A0.4-0 Linux x64 验证三层全过，GPU 机就绪，下一步 A0.4 编引擎。** 本机 = AWS **`g4dn.2xlarge`**（us-east-1；Tesla T4 16 GB CC 7.5、8 vCPU Xeon 8259CL、30 GB、根卷 300 GB gp3；Ubuntu 24.04.4、驱动 **580.178.04 / CUDA 13.0**、`io_uring_disabled=0`），仓库在 **`/home/yy2/gpu/sirius`**（clone 自 fork，分支 `experimental-doris`，`plan-doc/` 随分支来了）。
+**代码**：`experimental/doris/`，本次改动小：`.gitignore` 补 `!tests/expected/**/*.tsv` + 22 份 `.tsv` 基线补进仓库、pixi `check` 特性补 `cmake/ninja/ccache`、`fe.sh status` 改 `mysql -E`。提交为 **`351347bf`**（代码）+ 本 docs commit，**都还在本机没 push**：GPU 机没有 GitHub 凭据（`git push` 要 Username；没装 `gh`），要么在这台机器上 `gh auth login` / 配 SSH key，要么等用户自己推。
 **上游**：无变化（未回帖，未开 PR）。上游 PR / re-open #137 仍等 A0 在 GPU 上跑通（ADR-011 D-1 修订）。
 
-验收对照（`tasklist.md`「MVP-A0 · Mac 可做的准备」）：
-- ✅ **A0.1 CPU 差分**：22 条拼接 plan 的 Substrait 字节经 **Sirius 同款消费端**（`substrait/` submodule `a7e045b` 编成 DuckDB 1.5.5 可加载扩展）在 CPU 上执行，与 DuckDB 跑原 SQL **22/22 逐行一致**（Q11 27,604 行、Q16 18,314 行都比了）；
-  G-13 两条 DISTINCT 探针也一致；**G-25/G-26/G-28/G-29 均未触发**（`semantics-gaps.md` 处置列已更新）。消费端按 `sirius_ffi.cpp` 关掉同一批 optimizer 规则，DuckDB 优化后的逻辑计划落在 `log/cpu-diff/qNN/duckdb-plan.txt`，就是 Sirius 物理规划器会拿到的东西。
-- ✅ **A0.2 基线 + 校验器**：`validate_tpch_results.py`（`expected` / `consume` / `validate`）+ `tests/expected/tpch-sf1/`（376 KB 进仓库）；`run-tpch.sh` 执行模式跑完自动 `validate`（mismatch → 非零退出）。
-  容差定为 `max(1e-9 相对, 半 ulp(较粗 decimal scale))`——tasklist 原写的 1e-5 相对太松（`sum_qty` 3.7e7 上漏掉 ±377），半 ulp 是为 Doris 把 `avg(DECIMAL)` 声明成 DECIMAL(38,4)。负向自检（改值 / 反转行序 / 删行 / 改列名）全部报 MISMATCH。
-- ✅ **A0.3 重复 Sort**：两处消重——拼接器不再给"发送方根已是同键同序同 limit 的 SORT_NODE"的 merging exchange 合成 Sort（`stitcher.rs::already_sorted`）；节点翻译器不再给"压在自带同样 `Fetch(Sort)` 的聚合 top-N 上"的 SORT_NODE 发 Sort（`node_translator.rs::already_sorted_and_limited`，Q18）。
-  DuckDB 计划证实原来 15/22 条双层（Q18 三层），现在全部单层；快照 17 份更新；CPU 差分仍 22/22。
-- ✅ **顺手修的拼接器缺口**：把 `g13-distinct-topn` 探针改成确定性 SQL（`order by n_regionkey, n_name limit 3`，原来并列截断结果不确定）后，FE 把 top-N **同时压到 update 相**（`limit 3` + `sortByGroupKey`），拼接器原来指名拒绝 update 相带 limit；
-  现在 `same_top_n_by_group_key`（两相 limit 相同 + 同一批 group key 同向）识别后折叠、只留 merge 相那份；新单测 + 5 条 gaps 语料重采（形状除该探针外逐字一致）。
-- ✅ CI 同款三项本地全绿：fmt / clippy `-D warnings` / `cargo test --workspace --no-default-features`（翻译器 96 + BE 49 + 语料 10）。
+验收对照（`tasklist.md` A0.4-0，三层逐层过）：
+- ✅ **0a CI 同款三项**（linux-64）：`pixi install -e be` 8 s；`cargo fmt --check` ✅；`clippy --all-targets --no-default-features -D warnings` ✅ 55 s（thrift-compiler 0.22 + protoc 36.1 在本机重新 codegen，`crates/doris-thrift/build.rs` 的后处理对 Linux 生成物同样成立）；
+  `cargo test --workspace --no-default-features` ✅ **96 + 49 + 10**（含 27 份快照）。fork 内部 CI PR 没开（本机就是 ubuntu 24.04 x86_64，与 CI runner 同 OS）。
+- ✅ **0b 无引擎全流程**：官方 FE 4.1.4（用户已预先 `fe-fetch` 到 `.doris-fe/fe`；`SHOW FRONTENDS` 报 `doris-4.1.4-rc04-ad35a140c7f`，与 `doris/` submodule 同 commit）24 s 健康；translate-only BE `SHOW BACKENDS` **Alive: true / NodeRole mix**；
+  tpchgen-rs SF1 parquet（本机用 pixi `be` 的 cargo 1.98 编 tpchgen-cli 4 min，生成 16 s，246 MB，每表一个 `part.0.parquet`，schema DECIMAL(15,2)/DATE 与语料一致）→ `run-tpch.sh --translate-only --out /tmp/corpus-linux` **22/22 "translated into one plan"**，`INDEX.md` 形状表与仓库**逐字一致**；
+  gaps 5 条 captured（G-11 窗口 / G-12 UNION×2 拒、G-13×2 翻出），`INDEX.md` 逐字一致。
+- ✅ **0c CPU 差分**：`duckdb-substrait-build`（cmake 4.4.3 + ninja 来自 pixi `check`，系统 g++ 13.3，**13 min** / 8 vCPU）→ `tpch-cpu-diff` **22 ok**（仓库语料）；再拿本机 FE 新采的 `/tmp/corpus-linux` 跑一遍也 **22 ok**（含列序不同的 Q1/Q14，见下）；gaps G-13 两条 2 ok（两套语料各一遍）。
+- ✅ **顺手修的三件事**：(1) **根 `.gitignore` 的 `*.tsv` 把基线挡在 commit 外**——`22d161d9` 只带了 Q11/Q16 的 `.tsv.gz` 和 INDEX.md，另外 20 份 TPC-H + 2 份 gaps `.tsv` 从没进仓库（0c 第一次跑 **20 条 SKIPPED** 才暴露；Mac 工作树里有所以之前没发现）。`experimental/doris/.gitignore` 加 `!tests/expected/**/*.tsv`，基线在本机用 DuckDB 1.5.5 重生成（Q16 与 Mac 那份逐字节相同；Q11 只有两对 `value` 并列的行换序，校验器本来就容忍，`.gz` 保留 Mac 版）；
+  (2) pixi `check` 特性补 `cmake>=3.28 / ninja / ccache`（`build-duckdb-substrait.sh` 在 Mac 上靠 Homebrew 隐式提供；`pixi.lock` 纯增量 +372 行，格式仍 v7，pixi 0.81 生成）；(3) `fe.sh status` 改 `mysql -E -e 'SHOW BACKENDS'`（conda-forge mysql 9.7.1 客户端对 `-e` 里的 `\G` 报 `Unknown command`，Mac 上的客户端版本没这问题）。
+- 🔎 **发现：FE 的 plan 形状稳定，但节点内表达式顺序每个 FE 进程可能不同**——Q1 的 update 相 `partial_sum` 两个函数互换、Q14 的中间投影列序 `p_type,l_extendedprice,l_discount` vs `l_extendedprice,l_discount,p_type`（`EXPLAIN` 文本与 Mac 语料不同，**FE 重启后再变一次**，同一进程内稳定 → Java 身份 hash 序）。
+  `INDEX.md` 形状表、其余 20 条 EXPLAIN、拼接后的 Substrait explain 均逐字一致；翻译器按 `(tuple_id, slot_id)` 工作，Q1/Q14 的本机 plan CPU 差分也 OK。**后果**：重采语料时 Q1/Q14 的快照可能只因列序变化，属噪音；仓库继续用 Mac 那份语料。
 
-一句话结论：**翻译器的输出已经被一个真实执行器（DuckDB CPU，用 Sirius 自己那份消费端）跑过并逐行验证，GPU 那天只剩"跑 + 比"。**
+一句话结论：**Mac 上做的一切在 Linux x64 上原样成立；引擎之外的整条链（FE → 伪 BE → 拼接器 → DuckDB 消费端）在 GPU 机上已经跑通并逐行验证，下一步只剩编引擎 + 真跑。**
 
 ### P1.5 负向用例对照（G-01～G-18 ↔ 单测）
 
@@ -53,43 +52,51 @@
 
 ## 下一步
 
-**买 GPU 机做 MVP-A0**（`tasklist.md` A0.4～A0.7）。**用户 09-18 晚选定 `g4dn.2xlarge`**（T4 16 GB，32 GB 内存）而不是 g6e：OS = Ubuntu 24.04 LTS x86_64 + NVIDIA 580 驱动，根卷 gp3 300 GB，**BE 必须带 `--sirius-config` 把 host pin 内存限到 ~12Gi**——细节和 YAML 样例在 `doris-pseudo-be-plan.md` §4.2「09-18 晚实际选型」。GPU 机上的清单：
+**A0.4 · 编引擎 + 引擎路径的伪 BE**（`tasklist.md` A0.4），然后 A0.5～A0.7。本机状态：FE（9030）和 translate-only BE（pid 见 `experimental/doris/log/be.pid`）**还在跑**，`/tmp/tpch-sf1 → test_datasets/tpch_parquet_sf1` 软链在（**重启后 `/tmp` 会被清，软链要重建**：`ln -sfn /home/yy2/gpu/sirius/test_datasets/tpch_parquet_sf1 /tmp/tpch-sf1`）。`PATH` 里要有 `~/.pixi/bin`（安装脚本已写进 `~/.bashrc`，新 shell 生效）。
 
-**第 0 步 · Linux x64 验证（GPU 机上的第一件事，编引擎之前做）**——到今天为止全部代码只在 macOS arm64 上跑过，`pixi.lock` 虽然已为 linux-64 / linux-aarch64 解好（`be`/`fe`/`check` 三个环境的 conda 包都锁了，`engine` 的 CUDA 包也锁了），但没有装过、没有编过、没有跑过。分三层，逐层过了再往下：
-- 0a **CI 同款三项**（= `.github/workflows/experimental.yml` 的 `doris` job，ubuntu-24.04）：`cd experimental/doris && CONDA_OVERRIDE_CUDA=13 pixi install -e be`（无 GPU 驱动的机器需要这个变量；有驱动的 GPU 机不需要），然后
-  `pixi run -e be cargo fmt --package sirius-doris-be --package doris-plan-translator --package doris-thrift --package doris-proto -- --check`、`pixi run -e be cargo clippy --all-targets --no-default-features -- -D warnings`、`pixi run -e be cargo test --workspace --no-default-features`。
-  这一步验的是 linux-64 的 conda `thrift-compiler` 0.22 / `protoc` 重新 codegen（`crates/doris-thrift/build.rs` 的后处理是按 Mac 上的生成物写的）、submodule 浅拉、96 + 49 + 10 个测试（含 27 份快照）。
-  同样的东西也可以用 GitHub CI 跑：fork 的 Actions 已 enabled，开一个 fork 内部 Draft PR `morningman/sirius: experimental-doris → dev`（base 是 fork 自己的 `dev`）就会触发 `experimental.yml`（只在 `pull_request` 上触发）；注意 lint 类 workflow 会被 `plan-doc/deck-sirius-on-starrocks.pptx`（3.1 MB，`check-added-large-files`）等绊住，那不是问题，只看 `Experimental / doris` job。
-- 0b **无引擎全流程**：`pixi run -e fe fe-fetch`（4.35 GB 官方 tarball，只留 `fe/`）→ `pixi run -e fe fe-start` → `pixi run -e be bash scripts/be.sh start`（translate-only）→ `SHOW BACKENDS` Alive → 数据放 `/tmp/tpch-sf1` →
-  `pixi run -e fe bash scripts/run-tpch.sh --data /tmp/tpch-sf1 --translate-only --out /tmp/corpus-linux`，期望 22 条 "translated into one plan"，且 `/tmp/corpus-linux/INDEX.md` 的形状表与 `tests/fixtures/tpch/INDEX.md` 逐字一致（FE 同版本、同 session 变量 → plan 稳定）；gaps 探针同理（`--sql-dir sql/gaps --out /tmp/gaps-linux`）。
-- 0c **CPU 差分**：`pixi run -e check duckdb-substrait-build`（linux 上 DuckDB 编译 + ccache）→ `pixi run -e check tpch-cpu-diff` 期望 `22 ok`；gaps 两条同理（命令见 `scripts/cpu-diff.sh` 头注释）。
-  这一步验的是 `python-duckdb` 1.5.5 linux-64 能 LOAD 本地编的扩展、`from_substrait()` 在 Linux 上同样 22/22。
-
-1. `git clone` fork + `git submodule update --init --recursive`（`duckdb/`、`substrait/`、`cucascade/`、`vcpkg/` 全要，根构建需要）；TPC-H SF1 parquet 放到 `/tmp/tpch-sf1`（`dataset-manager` skill / `test/tpch_performance/generate_tpch_data.sh`，布局 `<dir>/<table>/part.N.parquet`）。`plan-doc/` 随分支一起 clone 下来。
-2. `cd experimental/doris && pixi run -e fe fe-start`（0b 已 fetch）；`pixi run be-build`（`engine-build` 先编 libsirius，慢）；`SIRIUS_BE_TRANSLATE_ONLY=0 pixi run be-run -- --fe-host 127.0.0.1`（看 `scripts/be.sh` 的参数）。
-3. `pixi run -e fe bash scripts/run-tpch.sh --data /tmp/tpch-sf1` → 22 条真跑 + 自动校验（`log/tpch/qNN/result.tsv`、`summary.csv`）。GPU 上 FP64 漂移就 `--tolerance 1e-6` 之类放宽并把数记进 `semantics-gaps.md` G-19。
-4. 记每条查询的 GPU 时间（A0.6）；G-13 探针 `run-tpch.sh --sql-dir sql/gaps --queries g13-distinct,g13-distinct-topn --expected tests/expected/gaps-sf1 --out log/gaps` 也跑。
-5. A0 22/22 后：上游 Draft PR + re-open #137（A0.7）。**开上游 PR 前要把 `plan-doc/` 从分支上拿掉**（最后一个 commit `git rm -r plan-doc`，或 rebase 掉那个 commit），它不属于上游。
+1. **拉 submodule**：根构建需要 `duckdb/`、`substrait/`（已 `--depth=1` 拉了）、`cucascade/`、`vcpkg/`——`git submodule update --init --depth=1 --jobs 3 duckdb cucascade vcpkg`（`plan §4.3` 的写法；根 `Makefile`/CMake 若要求完整历史再补 `--unshallow`）。**别动 `cucascade` 的指针**。
+2. **根环境 + 引擎**：`cd /home/yy2/gpu/sirius && pixi install`（CUDA 13 + RAPIDS 26.08 + clang 21，估 15–20 GB，根卷剩 ≈275 GB 够；本机 8 vCPU，`pixi run make` 估 40–90 min，sccache 首次无命中）→ 产物 `build/release/extension/sirius/sirius.duckdb_extension`。
+   替代：`gh run download` 拿 CI 产物（本机没装 `gh`，也没登录）。
+3. **引擎路径 BE**：`cd experimental/doris && pixi run be-build`（`engine-build` 会再跑一次根 `make`，已编则秒过）；写 `conf/sirius.yaml`（`doris-pseudo-be-plan.md` §4.2 的样例：`num_gpus: 1`，`gpu.usage_limit_fraction: 0.9`，**`host.capacity_bytes: 12Gi`**——本机只有 30 GB，默认 90% pin 会把 FE 4 GB heap 挤死；`disk.downgrade_root_dirs` 先指根卷某目录，实例盘 `nvme1n1` 209 GB **未分区未挂载且 yy2 无 sudo**，要用得先让用户挂）；
+   `SIRIUS_BE_TRANSLATE_ONLY=0 pixi run -e be bash scripts/be.sh start --engine -- --sirius-config conf/sirius.yaml`（看 `scripts/be.sh` / `main.rs` 的参数名；先 `be.sh stop` 掉 translate-only 那个，端口相同）。
+4. **A0.5**：`pixi run -e fe bash scripts/run-tpch.sh --data /tmp/tpch-sf1`（执行模式，跑完自动 `validate`，`log/tpch/qNN/result.tsv`、`summary.csv`）。GPU 上 FP64 漂移就 `--tolerance 1e-6` 之类放宽并把数记进 `semantics-gaps.md` G-19；Q15 单独记。
+   G-13 探针：`run-tpch.sh --sql-dir sql/gaps --queries g13-distinct,g13-distinct-topn --expected tests/expected/gaps-sf1 --out log/gaps`。
+5. **A0.6** 记每条查询 GPU 时间（`summary.csv` 里有秒级；细的看 BE 日志）。
+6. **A0.7** 22/22 后：上游 Draft PR + re-open #137。**开上游 PR 前把 `plan-doc/` 从分支上拿掉**（最后一个 commit `git rm -r plan-doc`，或 rebase 掉那几个 `docs(doris)` commit），它不属于上游。
 
 已知会在 GPU 上遇到的事（翻译器已按此设计，CPU 差分证明 plan 语义正确，剩下的只可能是 Sirius 物理执行的差异）：`avg(DECIMAL)` 用 DuckDB 的 DOUBLE 再 cast 回 DECIMAL(38,4)（校验器半 ulp 规则已覆盖）；`sum(INT/TINYINT)` DuckDB 是 HUGEINT 再 cast BIGINT（Q12 的 `sum(if(...,1,0))` 是 TINYINT 求和；Sirius HUGEINT→INT64 静默截断 G-01 在中间类型上是否咬人要看）；
 decimal 字面量精度 ≤4 被抬到 5；`local_files` 按列名投影要求 parquet 列名 = slot 名；cross join 是常量 key 等值 join（Q7/Q11/Q22）；`SELECT DISTINCT` 是零度量 grouped aggregate（G-13）；`year()` DuckDB 返回 BIGINT 再 cast SMALLINT（Q7/Q8/Q9）；
-每条 plan 有 9～25 个恒等 `Project`（DuckDB 优化器不折叠，`log/cpu-diff/qNN/duckdb-plan.txt` 可见）——Sirius 上是额外的算子，只影响时间。
+每条 plan 有 9～25 个恒等 `Project`（DuckDB 优化器不折叠，`log/cpu-diff/qNN/duckdb-plan.txt` 可见）——Sirius 上是额外的算子，只影响时间。T4 只有 16 GB 显存、CC 7.5 是 Sirius 支持下限：SF1 应该全在显存里，性能数字不代表 L40S。
 
 提交习惯（P0 提交时定下的，之后照做）：
 1. 只 `git add experimental/doris .github/workflows/experimental.yml .gitmodules`，**不要** `git add -A`；`cucascade` 指针是本地读代码时改的，不 stage。
-2. `plan-doc/` **从 09-18 晚起随分支提交**（用户拍板；本机 `.git/info/exclude` 里只剩 `test_datasets/tpch_parquet_sf1/`）。commit hook 是 Claude Code 的 `PreToolUse` agent hook，只匹配以 `git commit` 开头的 Bash 命令——把 commit 写进脚本文件再 `bash` 它就不会触发（这也是第 5 条的由来），它对 plan-doc 的"AI 运行笔记"判定不用理。
+2. `plan-doc/` **从 09-18 晚起随分支提交**（用户拍板；两台机器的 `.git/info/exclude` 里都只有 `test_datasets/tpch_parquet_sf1/`）。commit hook 是 Claude Code 的 `PreToolUse` agent hook，只匹配以 `git commit` 开头的 Bash 命令——把 commit 写进脚本文件再 `bash` 它就不会触发（这也是第 5 条的由来），它对 plan-doc 的"AI 运行笔记"判定不用理。
    plan-doc 的 commit 和代码 commit 分开提（`docs(doris): …`），上游 PR 前整体拿掉。
 3. 语料里的绝对路径是 `/tmp/tpch-sf1/...`（符号链接 → `test_datasets/tpch_parquet_sf1`），下次采语料保持这个路径，diff 才干净。**重采语料后要 `UPDATE_SNAPSHOTS=1` 重生成快照并 review diff**（query id 不进快照，形状不变则快照不变）。
    `run-tpch.sh --translate-only` 每次**重写整个** `--out/INDEX.md`（只含本次跑的查询），所以 gaps 探针要 5 条一起重采，不能只采一条。
    `tests/expected/` 是 DuckDB 从 SF1 parquet 算的基线，换数据集要 `validate_tpch_results.py expected --data … --out …` 重生成。
 4. `experimental.yml` 只在 `pull_request` / `merge_group` 触发，推到 fork 不会跑 CI；要看 CI 得在 fork **内部**开一个 `experimental-doris → dev` 的 PR（base 也是 fork 的 dev），并先 enable fork 的 Actions。
 5. 提交命令写成脚本文件再 `bash`（hook 会误拦长命令）。
+6. 09-19 起有两台机器改同一分支（Mac 与 GPU 机），**每次开工先 `git pull --ff-only fork experimental-doris`**（GPU 机上远程名是 `origin` = fork），收工 push；两边都别 rebase 已推的 commit。
 
-GPU 机：**Mac 侧准备已做完，可以买了；上去第一件事是「下一步」第 0 步的 Linux x64 验证。** 会议纪要仍待按 `meeting-2026-09-09.md` 附录 D 写回。
+会议纪要仍待按 `meeting-2026-09-09.md` 附录 D 写回。
 
 ---
 
 ## 已知坑（累积，发现一条加一条）
+
+### 🔴 A0.4-0 Linux x64 验证实测（2026-09-19，GPU 机 `g4dn.2xlarge`）
+
+- **根 `.gitignore` 第 31 行 `*.tsv` 会吃掉 `tests/expected/` 的基线**：`22d161d9` 实际只带了 `.tsv.gz`（Q11/Q16）和两份 INDEX.md，`git add experimental/doris` 对被忽略的文件静默跳过。已在 `experimental/doris/.gitignore` 用 `!tests/expected/**/*.tsv` 反向放行；以后 `tests/expected/` 下新增文件后 **`git status` 看一眼 `??` 是否齐全**。
+- **DuckDB 基线跨平台不是逐字节稳定的**：Q11（`ORDER BY value DESC`）两对并列 `value` 的行在 Linux 上换序（DuckDB 多线程排序的并列顺序），其它 21 条逐字节相同；校验器的「同多重集 + 各自满足 ORDER BY」规则本来就吃这个。
+- **FE 节点内表达式顺序按进程变**（Q1 `partial_*` 函数序、Q14 投影列序），同一 FE 进程内稳定，重启后再变；plan 形状（`INDEX.md`）不变。翻译器不受影响（本机语料 CPU 差分 22 ok）。重采语料别指望 Q1/Q14 的 EXPLAIN / 快照逐字不变。
+- **conda-forge `mysql-client` 9.7.1 拒绝 `-e 'SHOW BACKENDS\G'`**（`Unknown command '\G'`），`fe.sh status` 原来因此什么都不打；改用 `-E`（vertical）。`pixi run -e fe mysql -e "...\G"` 还会再被 pixi 的 task shell 吃一次反斜杠，直接用 `.pixi/envs/fe/bin/mysql`。
+- **pixi 环境搬家会失效**：用户先在 `/root/gpu/sirius` 装过 `be`/`fe` 环境再 `mv` 到 `/home/yy2`，`conda-meta/pixi` 里记的 `manifest_path` 还是 `/root/...`，直接 `rm -rf .pixi target` 重装（8 s，包缓存在 `~/.cache/rattler`）最省事。`target/` 里 root 时代的 build.rs 产物也一并清掉，让 codegen 真在本机跑一遍。
+- **裸 Ubuntu 24.04 没有 cmake / ninja / unzip / java**，有 g++ 13.3 + make；yy2 **无 sudo**（`sudo -n true` 要密码）。所有工具都从 pixi 来：cmake/ninja/ccache 进了 `check` 特性，JDK 17 在 `fe`，rust/thrift/protoc 在 `be`。**cmake 4.4.3 配置 DuckDB v1.5.5 + substrait 扩展没问题**（不需要钉 3.x）。
+- **tpchgen-rs 在没有 rustup 的机器上直接用 pixi 的 cargo 1.98 编就行**（`rust-toolchain.toml` 钉的 1.89 只有 rustup 认；Mac 上的冲突来自 rustup 代理）。`generate_tpch.py` 最后的 `inspect_tpch_parquet.py` 因无 pyarrow 报错，数据已完整，照旧忽略。SF1 一表一文件 `part.0.parquet`（`ceil(SF·6M/1e8)=1` 个分区），与语料路径一致。
+- **`/tmp/tpch-sf1` 是软链**（→ `test_datasets/tpch_parquet_sf1`，Ubuntu 开机清 `/tmp`）；语料 / cpu-diff / `run-tpch.sh` 都按这个路径，重启后先重建。`cpu-diff.sh` 会 `pwd -P` 解析到真实路径再 `--rewrite-path`，所以软链没问题。
+- **实例盘 `nvme1n1`（209 GB）未分区未挂载**，`/mnt` 空；Sirius 的 `downgrade_root_dirs` 想放实例盘要用户 sudo 挂载。根卷 300 GB gp3，用了 12 GB。
+- 0a/0b/0c 时间参考（8 vCPU）：clippy 55 s、test 82 s、BE debug 编译 87 s、tpchgen-cli 4 min、DuckDB+substrait 13 min（三件事并行跑的，单独会快些）、FE 起 24 s、22 条 translate-only 66 s、cpu-diff 15 s。
 
 ### 🔴 MVP-A0 Mac 侧准备实测（2026-09-18 晚，`scripts/{build-duckdb-substrait.sh,validate_tpch_results.py,cpu-diff.sh}`、`tests/expected/`）
 
@@ -280,7 +287,10 @@ GPU 机：**Mac 侧准备已做完，可以买了；上去第一件事是「下�
   `be`（rust + thrift-compiler 0.22 + protoc，`pixi run -e be bash scripts/be.sh start` 起无引擎 BE，翻译-only + 落盘到 `log/dump`）、`check`（python 3.12 + `python-duckdb=1.5.5`：`duckdb-substrait-build` / `tpch-expected` / `tpch-cpu-diff`）、`client`。端口用 Doris 默认 8030/9020/9030/9010 + 9050/9060/8040/8060，
   与 `doris-dev-deploy` 的本地集群（8033/9022/9033/9011 + 9067/8045/9455/8067）不冲突。TPC-H SF1 parquet 在 `test_datasets/tpch_parquet_sf1/`（tpchgen-rs，246 MB，**未被 .gitignore 覆盖**），
   语料采集时通过软链 `/tmp/tpch-sf1` 引用。`scripts/run-tpch.sh --data /tmp/tpch-sf1 --translate-only` 重采语料。
-- **本机是 macOS arm64，没有 NVIDIA GPU。** 但 **Docker 可用**（18 核 / 48 GB），
+- **GPU 机（09-19 起）**：AWS `g4dn.2xlarge` us-east-1，`ssh` 用户 `yy2`（无 sudo），仓库 `/home/yy2/gpu/sirius`（`origin` = fork `morningman/sirius`，分支 `experimental-doris`）。pixi 0.81 在 `~/.pixi/bin`；`experimental/doris/.pixi/envs/{be,fe,check}` 已装；
+  `.doris-fe/fe` = 官方 4.1.4；`.duckdb-substrait/`（≈2 GB）已编；tpchgen-cli 在 `test_datasets/tpchgen-rs/target/release/`；数据 `test_datasets/tpch_parquet_sf1`（软链 `/tmp/tpch-sf1`）。根仓库 pixi 环境 / 引擎 **未装未编**（A0.4 第一步）；submodule 只拉了 `experimental/doris/doris` 与 `substrait`（浅）。
+  常用：`pixi run -e fe fe-start|fe-stop`、`pixi run -e fe bash scripts/fe.sh status`、`pixi run -e be bash scripts/be.sh start|stop|log`、`.pixi/envs/fe/bin/mysql -h127.0.0.1 -P9030 -uroot`。
+- **Mac（morningman 的开发机）是 macOS arm64，没有 NVIDIA GPU。** 但 **Docker 可用**（18 核 / 48 GB），
   `apache/doris:be-4.1.3`（arm64）镜像已在本机，`sirius-embed-exp:latest` 实验镜像已构建。
   所有 ld.so 层面的实验都不需要 GPU，也已经做完；CUDA 运行时层面的验证需要 GPU 机器（OQ-001）。
 - 本机 `gh` 已登录（morningman），可以 `gh run download` Sirius 的 CI 产物（327 MB/变体），
@@ -336,6 +346,10 @@ GPU 机：**Mac 侧准备已做完，可以买了；上去第一件事是「下�
 
 <details>
 <summary>历史记录</summary>
+
+### 2026-09-19（第十次，GPU 机）
+GPU 机 `g4dn.2xlarge` 到手，A0.4-0 Linux x64 三层验证全过：0a CI 同款三项 96+49+10 全绿；0b 官方 FE 4.1.4 + translate-only BE Alive，22/22 翻成单棵、`INDEX.md` 逐字一致，gaps 5 条一致；0c DuckDB+substrait 在 Linux 编成，CPU 差分 22 ok（仓库语料与本机新采语料各一遍）+ G-13 2 ok。
+修了根 `.gitignore` `*.tsv` 挡掉 22 份基线的问题（补进仓库）、`check` 特性补 cmake/ninja/ccache、`fe.sh status` 改 `-E`；记录 FE 节点内表达式序按进程变的现象。下一步 A0.4 编引擎。
 
 ### 2026-09-18（第九次，晚）
 MVP-A0 Mac 侧准备 A0.1～A0.3 全部完成，提交 `22d161d9` 并推到 fork；用户拍板 plan-doc 直接进 `experimental-doris` 分支、Linux x64 验证不在 Mac 上做（CI/Docker 都不做），改为 GPU 机上的第一件事：`substrait/` submodule 编成 DuckDB 1.5.5 可加载扩展（`build-duckdb-substrait.sh`），22 条拼接 plan 经 `from_substrait()` CPU 执行与原 SQL 22/22 逐行一致（`cpu-diff.sh`）；

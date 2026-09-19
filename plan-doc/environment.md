@@ -1,13 +1,13 @@
 # 开发环境
 
-> 最后核对：2026-09-18（Darwin arm64）
+> 最后核对：2026-09-19（GPU 机 Linux x86_64；Mac 部分 2026-09-18）
 
 ## 两个仓库
 
 | 仓库 | 路径 | 分支 | 角色 |
 |---|---|---|---|
 | **Doris（开发主战场）** | `/Users/morningman/workspace/git/wt-gpu` | `wt-gpu`（worktree，追踪 `upstream-apache/master`） | 本项目**所有 Doris 侧改动都在这里**。它是 `/Users/morningman/workspace/git/doris` 的 git worktree |
-| **Sirius（参考 + 轨 1 主战场）** | `/Users/morningman/workspace/git/sirius` | `dev`；轨 1 在 **`experimental-doris`** 分支（`experimental/doris/`） | 轨 2 在 MVP-0/1 阶段只读参考；轨 1 的全部代码在这里 |
+| **Sirius（参考 + 轨 1 主战场）** | Mac `/Users/morningman/workspace/git/sirius`；**GPU 机 `/home/yy2/gpu/sirius`** | `dev`；轨 1 在 **`experimental-doris`** 分支（`experimental/doris/`），两台机器共用 fork `morningman/sirius` 同步 | 轨 2 在 MVP-0/1 阶段只读参考；轨 1 的全部代码在这里 |
 | 文档空间 | `sirius/plan-doc/` | 随 sirius | 本目录 |
 
 `wt-gpu` 是 worktree 不是独立 clone —— `git rev-parse --git-dir` 指向
@@ -89,10 +89,28 @@ cd /Users/morningman/workspace/git/wt-gpu
 | JDK 17 + mysql 客户端 | pixi `fe` 环境（conda-forge） | `pixi run -e fe mysql -h127.0.0.1 -P9030 -uroot` |
 | thrift 0.22 / protoc / rust | pixi `be` 环境 | `pixi run -e be cargo test --workspace --no-default-features` |
 | 伪 BE（无引擎） | `scripts/be.sh start`（翻译-only，落盘 `log/dump`） | `pixi run -e be bash scripts/be.sh start` / `stop` / `log` |
-| TPC-H SF1 parquet | tpchgen-rs（`test_datasets/tpchgen-rs`，用 **rustup** 的 cargo 编，钉 1.89）→ `test_datasets/tpch_parquet_sf1/`，软链 `/tmp/tpch-sf1` | `pixi run -e fe bash scripts/run-tpch.sh --data /tmp/tpch-sf1 --translate-only` |
+| TPC-H SF1 parquet | tpchgen-rs（`test_datasets/tpchgen-rs`，Mac 用 **rustup** 的 cargo 编，钉 1.89；没有 rustup 的机器直接用 pixi `be` 的 cargo）→ `test_datasets/tpch_parquet_sf1/`，软链 `/tmp/tpch-sf1` | `pixi run -e fe bash scripts/run-tpch.sh --data /tmp/tpch-sf1 --translate-only` |
+| DuckDB + substrait 消费端（CPU 差分） | pixi `check` 环境（python-duckdb 1.5.5 + cmake/ninja/ccache）+ 系统 C++ 编译器 → `.duckdb-substrait/` | `pixi run -e check duckdb-substrait-build`；`pixi run -e check tpch-cpu-diff` |
 
 端口：FE 8030/9020/9030/9010，BE 9050/9060/8040/8060（Doris 默认），与 `doris-dev-deploy` 的本地集群不冲突。
 引擎路径（`sirius-engine` feature、`pixi run be-build`）只能在 Linux + NVIDIA 上跑（MVP-A0 起）。
+
+## GPU 机（AWS `g4dn.2xlarge`，2026-09-19 起）
+
+| 项 | 实测 |
+|---|---|
+| 实例 | `g4dn.2xlarge`，us-east-1；Tesla T4 16 GB（CC 7.5 = Sirius 下限）、8 vCPU Xeon 8259CL、30 GB 内存、无 swap |
+| OS / 驱动 | Ubuntu 24.04.4 LTS x86_64，内核 6.17 aws；NVIDIA **580.178.04**，`nvidia-smi` 报 CUDA 13.0；`/proc/sys/kernel/io_uring_disabled = 0`；无系统 CUDA toolkit（全靠 pixi） |
+| 盘 | 根卷 300 GB gp3（`/`，已用 ≈12 GB + 本次 ≈10 GB）；实例盘 `nvme1n1` 209 GB **未分区未挂载**，`/mnt` 空（停机即清；要用需 sudo） |
+| 账户 | `yy2`，**无 sudo**；系统只有 g++ 13.3 / make / git / python 3.12，**没有** cmake、ninja、unzip、java、gh、docker、rustup |
+| pixi | 0.81.0，`~/.pixi/bin`（`~/.bashrc` 已加 PATH）；包缓存 `~/.cache/rattler` |
+| 仓库 | `/home/yy2/gpu/sirius`，`origin` = fork `morningman/sirius`，分支 `experimental-doris`；submodule 已拉：`experimental/doris/doris`（4.1.4）、`substrait`（浅）；**`duckdb`/`cucascade`/`vcpkg` 未拉，根 pixi 环境未装，引擎未编** |
+| `experimental/doris/` | `.pixi/envs/{be,fe,check}` 已装；`.doris-fe/fe` = 官方 4.1.4；`.duckdb-substrait/`（DuckDB 1.5.5 + substrait 扩展，≈2 GB）已编；`target/` debug 已编 |
+| 数据 | `test_datasets/tpch_parquet_sf1/`（tpchgen-rs，246 MB，`<table>/part.0.parquet`；本机 `.git/info/exclude`），软链 **`/tmp/tpch-sf1`**（开机清 `/tmp`，重建：`ln -sfn /home/yy2/gpu/sirius/test_datasets/tpch_parquet_sf1 /tmp/tpch-sf1`）；生成器 `test_datasets/tpchgen-rs/target/release/tpchgen-cli` |
+| 进程 | FE：`pixi run -e fe fe-start|fe-stop`，`scripts/fe.sh status`；BE：`pixi run -e be bash scripts/be.sh start|stop|log`（`log/be.pid`）；客户端 `.pixi/envs/fe/bin/mysql -h127.0.0.1 -P9030 -uroot -E`（`\G` 在 9.7 客户端里不能用） |
+
+**能做什么**：Mac 能做的全部 + 编 Sirius 引擎 + 引擎路径 BE + GPU 差分 + 性能测量（T4 数字不代表 L40S）。三层验证（A0.4-0）已过，见 `handoff.md`。
+**内存约束**：Sirius 默认 pin 90% 内存做 host tier，30 GB 机器上 BE 必须带 `--sirius-config` 把 `host.capacity_bytes` 限到 ≈12Gi（`doris-pseudo-be-plan.md` §4.2）。
 
 ## Sirius 侧（只读参考期）
 

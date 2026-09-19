@@ -2,8 +2,8 @@
 
 进度约定：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成。完成时在条目后补一行 `→ 产出：<路径/commit>`。
 
-**当前阶段（2026-09-18）：两条轨。**
-- **轨 1 · 伪 BE（ADR-011，验证/benchmark 载体）**：P0 脚手架完成（2026-09-18）；P1 翻译器全部完成（2026-09-18）；**MVP-A0 的 Mac 侧准备全部完成（2026-09-18 晚：A0.1 CPU 差分 22/22 一致、A0.2 基线 + 校验器接进 `run-tpch.sh`、A0.3 重复 Sort 消掉）** → 下一步 **买 GPU 机跑 A0.4～A0.7**。
+**当前阶段（2026-09-19）：两条轨。**
+- **轨 1 · 伪 BE（ADR-011，验证/benchmark 载体）**：P0 脚手架完成（2026-09-18）；P1 翻译器全部完成（2026-09-18）；MVP-A0 的 Mac 侧准备全部完成（2026-09-18 晚）；**GPU 机（AWS `g4dn.2xlarge`）已到手，A0.4-0 Linux x64 三层验证全部通过（2026-09-19）** → 下一步 **A0.4 编引擎、A0.5 22/22 GPU 差分**。
   **上游 PR / re-open #137 推迟到 A0 跑通后**（用户 09-18 拍板，ADR-011 D-1 修订）——此前全部在 fork `morningman/sirius` 的 `experimental-doris` 上迭代。
 - **轨 2 · 进程内（ADR-010，产品路径）**：P0 可嵌入性调研已完成（2026-09-01，`embeddability-study.md`）；`push_arrow` 提案在 #1590 等回复；MVP-0 未开工、搁置。
   轨 2 的 M0.1/M0.2（fragment dump + 语料）已由轨 1 的 P0 实现（语料两轨共用：`experimental/doris/tests/fixtures/tpch/`）。
@@ -48,11 +48,11 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
   - `backend_service.rs::dispatch` 整批 `translate_batch`；FE 实测 22/22 "all N fragments translated into one plan"；`run-tpch.sh` 每条打印翻译结论、新增 `--sql-dir`
   - `sql/gaps/` + `tests/fixtures/gaps/`（真 FE 派发的 G-11 窗口 / G-12 UNION×2 / G-13 DISTINCT×2）+ `gap_corpus_verdicts`；**发现并修了拼接器 bug**：零聚合函数的两阶段 group-by（`SELECT DISTINCT`）没被折叠
   - G-01～G-18 ↔ 负向单测对照表见 `handoff.md`「P1.5 负向用例对照」
-- [ ] （可选、无对外影响）fork 内部 PR `morningman/sirius: experimental-doris → dev`，只为让 `experimental.yml` 跑起来（它不在 push 上触发；fork 的 Actions 已 enabled）；本机全绿是 macOS，CI 是 linux-64。**09-18 晚用户决定不在 Mac 阶段做，并入 A0.4-0 的 Linux 验证**
+- [x] （可选、无对外影响）fork 内部 PR `morningman/sirius: experimental-doris → dev`，只为让 `experimental.yml` 跑起来（它不在 push 上触发；fork 的 Actions 已 enabled）；本机全绿是 macOS，CI 是 linux-64。**09-18 晚用户决定不在 Mac 阶段做，并入 A0.4-0 的 Linux 验证** ← **09-19 由 A0.4-0 在 GPU 机（ubuntu 24.04 x86_64，与 CI 同 OS）上本地跑 CI 同款三项替代，全绿；fork 内部 PR 仍未开**
 
 ### [ ] 轨 1 MVP-A0 · 单节点、单计划
 
-**Mac 可做的准备**（GPU 机买之前做完，让 GPU 那天只剩"跑 + 比"）← **全部完成 2026-09-18** → 产出：commit `22d161d9`（本地 `experimental-doris`，未 push）：
+**Mac 可做的准备**（GPU 机买之前做完，让 GPU 那天只剩"跑 + 比"）← **全部完成 2026-09-18** → 产出：commit `22d161d9`（`fork/experimental-doris`）：
 - [x] A0.1 **DuckDB CPU 差分** ← **已完成 2026-09-18** → 产出：`scripts/build-duckdb-substrait.sh`（upstream DuckDB `v1.5.5` = 扩展钉的 `d8cdaa33` + 仓库 `substrait/` submodule → 可加载扩展 + shell，`.duckdb-substrait/`，≈3 min）、
       `dump-fragments --stitch --write-plan FILE --rewrite-path OLD=NEW`、`scripts/cpu-diff.sh`（导出 22 个 plan → `validate_tpch_results.py consume`：`from_substrait()` + `sirius_ffi.cpp` 同一批 `disabled_optimizers`，落 `log/cpu-diff/qNN/{result.tsv,duckdb-plan.txt}`）。
       **22/22 逐行一致**（容差 1e-9 相对 / 半 ulp）；G-13 两条探针也一致；**G-25/G-26/G-28/G-29 在 22 条上均未触发**。
@@ -66,11 +66,15 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
 - [x] （顺手）拼接器缺口：`SELECT DISTINCT ... ORDER BY 全部 key LIMIT n` 时 FE 把 top-N 同时压到 update 相（`limit` + `agg_sort_info_by_group_key`），原来指名拒绝 → `stitcher.rs::same_top_n_by_group_key`：两相 limit 相同且按同一批 group key 同向排序时折叠、只留 merge 相那份；
       探针 `g13-distinct-topn` 改成确定性 SQL（原来 `order by n_regionkey limit 3` 并列截断不确定）并重采 5 条 gaps 语料
 
-**🔒 需要 GPU**（AWS `g6e.2xlarge`，Mac 侧准备已做完，**可以买了**）：
-- [ ] A0.4-0 **Linux x64 验证（GPU 机上的第一件事，编引擎之前）**：到目前为止一切只在 macOS arm64 上跑过。三层：0a CI 同款三项（`pixi install -e be` + fmt / clippy / test，或开 fork 内部 Draft PR 让 `experimental.yml` 跑）；
-      0b 无引擎全流程（`fe-fetch`/`fe-start` → translate-only BE → `run-tpch.sh --translate-only` 22/22 且 `INDEX.md` 形状表与仓库逐字一致，gaps 同理）；0c `duckdb-substrait-build` + `tpch-cpu-diff` 22/22。命令逐条见 `handoff.md`「下一步」第 0 步。
-      用户 09-18 晚决定：不在 Mac 上用 CI/Docker 提前验，直接在 GPU 机上做
-- [ ] A0.4 引擎路径：`pixi run be-build`（`sirius-engine` feature，`engine.rs` 已搬自 SR）；`SIRIUS_BE_TRANSLATE_ONLY=0`；FE 官方二进制同机
+**🔒 需要 GPU**（AWS **`g4dn.2xlarge`**，09-19 起在手：T4 16 GB / 8 vCPU / 30 GB / Ubuntu 24.04 / 驱动 580.178 CUDA 13.0；见 `environment.md`「GPU 机」）：
+- [x] A0.4-0 **Linux x64 验证** ← **已完成 2026-09-19（GPU 机上的第一件事）** → 产出：三层全过——
+      0a CI 同款三项：`pixi install -e be` 8 s、fmt ✅、clippy `-D warnings` ✅（thrift 0.22 / protoc 36.1 在 linux-64 重新 codegen，`build.rs` 后处理无需改）、test ✅ **96 + 49 + 10**；
+      0b 无引擎全流程：官方 FE 4.1.4（`doris-4.1.4-rc04-ad35a140c7f`，与 submodule 同 commit）24 s 健康，translate-only BE `Alive: true`；`run-tpch.sh --translate-only` **22/22 "translated into one plan"**，`INDEX.md` 形状表与仓库**逐字一致**；gaps 5 条 captured（G-11/G-12×2 拒、G-13×2 翻出）`INDEX.md` 逐字一致；
+      0c `duckdb-substrait-build`（cmake 4.4 + ninja + 系统 g++ 13.3，13 min）→ `tpch-cpu-diff` **22 ok**（仓库语料）+ **22 ok**（本机 FE 新采的语料）+ gaps G-13 2 ok × 2。
+      **顺手修的三件事**：(1) 根 `.gitignore` 的 `*.tsv` 把 `tests/expected/` 的 20 份 TPC-H + 2 份 gaps `.tsv` 基线挡在 `22d161d9` 之外（只有 Q11/Q16 的 `.gz` 进了仓库；0c 第一次跑 20 条 SKIPPED 才发现）——`experimental/doris/.gitignore` 加 `!tests/expected/**/*.tsv`，基线在本机用 DuckDB 重生成（Q16 与 Mac 逐字节相同，Q11 仅并列换序）；
+      (2) pixi `check` 特性补 `cmake/ninja/ccache`（Mac 靠 Homebrew 隐式提供，裸 Linux 没有）；(3) `fe.sh status` 改用 `mysql -E`（conda-forge mysql 9.7 客户端拒绝 `-e` 里的 `\G`）。
+      **发现**：FE 每个进程内投影列序 / 聚合函数序可能不同（Q1/Q14 EXPLAIN 与 Mac 不同，FE 重启后再变），plan **形状**稳定；翻译器按 slot id 工作不受影响（本机语料 CPU 差分 22 ok 证明）
+- [ ] A0.4 引擎路径：根仓库 `pixi run make`（CUDA 13 + RAPIDS 环境 15–20 GB，`duckdb`/`cucascade`/`vcpkg` submodule 全拉）→ `pixi run be-build`（`sirius-engine` feature，`engine.rs` 已搬自 SR）；`SIRIUS_BE_TRANSLATE_ONLY=0`；BE 带 `--sirius-config`（host pin ≤ 12Gi，见 `doris-pseudo-be-plan.md` §4.2）；FE 官方二进制同机（0b 已起）
 - [ ] A0.5 22/22 与 DuckDB 基线逐行一致（`run-tpch.sh --data …` 自动校验；SF1 用仓库里的 `tests/expected/tpch-sf1`，SF10 先 `validate_tpch_results.py expected --data … --out …` 生成；容差默认 1e-9 相对 + 半 ulp，GPU 上 FP64 漂移就用 `--tolerance` 放宽并记录；Q15 记录）；
       G-13 零度量 grouped aggregate、`sum(TINYINT)` HUGEINT 路径、`avg(DECIMAL)` DOUBLE 路径重点看。CPU 差分已证明 plan 本身正确，GPU 上的差异只能来自 Sirius 的物理执行
 - [ ] A0.6 每条查询 GPU 时间记录

@@ -417,6 +417,8 @@ B 的增量全是 A 从未触碰的面：
   `sirius: { topology: { num_gpus: 1 }, memory: { gpu: { usage_limit_fraction: 0.9 }, host: { capacity_bytes: 12Gi }, disk: { disk_id: 0, capacity_bytes: 100Gi, downgrade_root_dirs: "/mnt/nvme/sirius_spill" } } }`
   （键名见 `docs/super-sirius/configuration.md`；SF10 在 16 GB 显存上要靠 host/disk 降级，disk 段别省）。
 
+**09-19 到手实测**：`g4dn.2xlarge` us-east-1，Ubuntu 24.04.4 + 驱动 580.178.04（CUDA 13.0）、`io_uring` 开、根卷 300 GB、实例盘未挂载、账户无 sudo；A0.4-0 三层验证全过（`handoff.md`）。搭建时与 §4.3 的差别：pixi 装到用户目录即可；cmake/ninja/JDK/mysql 客户端都由 `experimental/doris` 的 pixi 环境提供，系统包一个都不用装。
+
 ### 4.3 GPU 机搭建步骤（一次性）
 
 ```bash
