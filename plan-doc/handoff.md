@@ -8,9 +8,9 @@
 
 **日期**：2026-09-19 晚（第十二次 session，GPU 机上的第三次）
 **阶段**：**轨 1 · Doris vs Doris+Sirius 基准 · T0 跑通——整套跑批脚本写好并在本机 SF1/SF10 上跑通 7 个系统（每个 4 轮 × 22 条全部过 DuckDB 基线校验），T0 结果在 `experiments/sf10-bench/results.md`；下一步是换 T1 机型（g6e.4xlarge）跑 SF10 + SF100 出主表。** A0.7 上游落地仍往后排。本机 = AWS **`g4dn.2xlarge`**（T4 16 GB、8 vCPU、30 GB；**09-19 晚起有 sudo**，实例盘已挂 `/mnt/nvme`），仓库 `/home/yy2/gpu/sirius`（`origin` = fork，分支 `experimental-doris`）。
-**代码**：全部在 `experimental/doris/`（plan §9 的清单，README「Benchmark」一节是用法）：`scripts/{fetch-be,be-native,bench,bench-all,run-tpch-duckdb,olap-load}.sh`、`scripts/{bench-report,fe-audit,evict-cache}.py`、`conf/{be.conf,sirius-bench.yaml}`、`sql/session-native{,-split}.sql`、`tests/expected/tpch-sf10/`；改了 `run-tpch.sh`（`--session-sql/--db`、`start_ms/end_ms`）、`sql/session.sql`（钉 `file_split_size_on_be/on_fe`、关 `enable_sql_cache`）、`sql/tpch-views.sql`（OR REPLACE）、`conf/fe.conf`（`remote_fragment_exec_timeout_ms`）、`doris-version.sh`（`DORIS_BE_DIR`）、`.gitignore`。**翻译器 / 伪 BE 执行路径 / 引擎没动。** commit **`547f799e`**（代码）+ 本次 docs commit；连同上一 session 的，本机所有 commit **都还没 push**。
+**代码**：全部在 `experimental/doris/`（plan §9 的清单，README「Benchmark」一节是用法）：`scripts/{fetch-be,be-native,bench,bench-all,run-tpch-duckdb,olap-load}.sh`、`scripts/{bench-report,fe-audit,evict-cache}.py`、`conf/{be.conf,sirius-bench.yaml}`、`sql/session-native{,-split}.sql`、`tests/expected/tpch-sf10/`；改了 `run-tpch.sh`（`--session-sql/--db`、`start_ms/end_ms`）、`sql/session.sql`（钉 `file_split_size_on_be/on_fe`、关 `enable_sql_cache`）、`sql/tpch-views.sql`（OR REPLACE）、`conf/fe.conf`（`remote_fragment_exec_timeout_ms`）、`doris-version.sh`（`DORIS_BE_DIR`）、`.gitignore`。**翻译器 / 伪 BE 执行路径 / 引擎没动。** commit **`547f799e`** + GPU 利用率采样的后续 commit（代码）、`39c8945d` + 后续（docs）；连同上一 session 的，本机所有 commit **都还没 push**。
 
-T0（T4）SF10 热跑 22 条合计：Doris stock 52.0 s、Doris `file_split_size_on_be=0` 46.7 s、Doris 内表 11.4 s、**Doris+Sirius O_DIRECT 54.5 s（盘 0.4 GB/s 的成绩）、Doris+Sirius 走 page cache 20.9 s**、DuckDB 8 线程 17.1 s、Sirius 透明路径 O_DIRECT 54.3 s。主表口径（A-split vs B′）**几何平均 2.04×、总时间 2.23×**；伪 BE 相对 Sirius 自己规划几乎零开销（0.99×）；T4 上的 Sirius ≈ 8 线程 DuckDB。细节与解读全在 `results.md` §2。
+T0（T4）SF10 热跑 22 条合计：Doris stock 52.0 s、Doris `file_split_size_on_be=0` 46.7 s、Doris 内表 11.4 s、**Doris+Sirius O_DIRECT 54.5 s（盘 0.4 GB/s 的成绩）、Doris+Sirius 走 page cache 20.9 s**、DuckDB 8 线程 17.1 s、Sirius 透明路径 O_DIRECT 54.3 s。主表口径（A-split vs B′）**几何平均 2.03×、总时间 2.22×**；伪 BE 相对 Sirius 自己规划几乎零开销（0.99×）；T4 上的 Sirius ≈ 8 线程 DuckDB；**GPU busy（`nvidia-smi utilization.gpu`）B′ 中位数只有 20 %**——引擎时间花在搬运/调度上而不是 GPU 算，T1 要看 PCIe 4.0 / 预取缓存 / `pin_table` 的效果。细节与解读全在 `results.md` §2。机型采购清单在 `plan.md` §2.5。
 
 **上游**：无变化（未回帖，未开 PR）。A0 已跑通 → ADR-011 D-1 修订的前置条件满足，可以开上游 Draft PR / re-open #137 了。
 
@@ -418,7 +418,7 @@ wall − engine ≈ 100–330 ms/条 = FE 规划 + `exec_plan_fragment_prepare/s
 
 ### 2026-09-19 晚（第十二次，GPU 机）
 基准方案 §12 拍板（NVMe 挂了、g6e.4xlarge + c7i.12xlarge、做参照 C），T0 全流程跑通：`fetch-be.sh`/`be-native.sh`/`conf/be.conf`、`session-native{,-split}.sql`、`bench.sh`/`bench-all.sh`/`bench-report.py`/`run-tpch-duckdb.sh`/`fe-audit.py`/`evict-cache.py`/`olap-load.sh`、`conf/sirius-bench.yaml`、SF10 数据 + 基线（`547f799e`）。
-SF10 在 T4 上 7 个系统各 4 轮全部过校验，`experiments/sf10-bench/results.md`：A-split vs B′ 几何平均 2.04×，B 默认 O_DIRECT 被 0.4 GB/s 的实例盘卡住（≈A），伪 BE 相对透明路径零开销，T4 上的 Sirius ≈ 8 线程 DuckDB，Doris 内表比外表快 4.6×。
+SF10 在 T4 上 7 个系统各 4 轮全部过校验，`experiments/sf10-bench/results.md`：A-split vs B′ 几何平均 2.03×，B 默认 O_DIRECT 被 0.4 GB/s 的实例盘卡住（≈A），伪 BE 相对透明路径零开销，T4 上的 Sirius ≈ 8 线程 DuckDB，Doris 内表比外表快 4.6×；采样器补了 GPU 利用率（B′ 中位数 20 %，GPU 大部分时间空转）。
 跑通过程中发现并进脚本的坑：伪 BE 注册着压 Doris 并行度到 1（DROPP）、4.1.4 两级文件切分在 SF10 上切 512 MB 段（session.sql 钉 on_be=0/on_fe=1T）、单文件外表 stock 只有 1 个 scanner（native-split）、FE `enable_sql_cache` 默认开、原生 BE storage 路径不能变、刚停的 BE 在 FE 上还 Alive、无 BE 时 `SELECT 1` 失败、FE 30 s RPC 超时。下一步 T1 机型出主表。
 
 ### 2026-09-19（第十一次，GPU 机）

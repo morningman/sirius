@@ -75,6 +75,14 @@
 - **价格**：表里是 2026-09 从 [Vantage](https://instances.vantage.sh/aws/ec2/g6e.4xlarge) / [Holori](https://calculator.holori.com/aws/ec2/g6e.2xlarge) / [DevZero](https://www.devzero.io/instances/aws/g7e.4xlarge) 抓的 us-east-1 按需 Linux 价，下单前看 AWS 定价页。
 - **镜像与磁盘**：Ubuntu Server 24.04 LTS 官方 AMI；根卷 gp3 300 GB（吞吐 250 MB/s）；实例盘由脚本 `mkfs.ext4 + mount /mnt/nvme`（需要 sudo——**新机器把 `yy2` 加进 sudoers 或直接用 ubuntu 用户**，现在这台没 sudo 是本方案唯一被卡住的地方）。
 
+### 2.5 SF100 采购清单（2026-09-19 晚，按 T0 实测补的账）
+
+- **T1 主机：g6e.4xlarge**（L40S 48 GB / 16 vCPU / 128 GB / 1×600 GB NVMe，$3.00/h）；预算允许就 **g6e.8xlarge**（32 vCPU / 256 GB / 1×900 GB，≈$4.5/h）——多花 $1.5/h 买 Doris 对齐官方报告的 32C、内存不用抠、更大更快的实例盘。**T1′ CPU 机：c7i.12xlarge**（$2.14/h，配 4xlarge）或 c7i.24xlarge（$4.28/h，配 8xlarge），只装 FE + 原生 BE。不买 g6e.2xlarge（8 vCPU）、g6（L4）、多卡。
+- **盘**：根卷 gp3 300 GB（默认吞吐即可；本机用了 40 GB）；**数据全放实例盘**：SF100 parquet **≈36 GB**（按 SF10 实测 3.6 GB 推算，不是 §5.0 估的 25 GB）+ 内表 ≈40 GB + spill 100 GB + SF10/基线 → ≈200 GB，600 GB 够。停机即清，SF100 重生成只要几分钟。
+- **到手先量盘速**（`dd iflag=direct` 单流 + 4～8 路并发）：G 系列实例盘是共享盘切片、吞吐大致随容量走，本机 225 GB 只有 0.4 GB/s，600 GB 估 1 GB/s 上下。它决定 B（O_DIRECT）有多少是盘的数字；B′ 不受影响。EBS 替代不了（gp3 单卷 1 GB/s 上限，io2 受实例 EBS 带宽限制）。
+- **SF100 内存账**：GPU 池高水位 SF10 11.2 GB → SF100 ≈110 GB，L40S 43 GB 装不下 → 大 join 走 host tier（正是要看的）。128 GB 机器：host tier 默认 114 GiB（pinned）+ 36 GB page cache 超了 → B′ 用 `bench.sh --host-capacity 64Gi`，B 用默认；Doris `mem_limit` 70 % = 89 GB + page cache 36 GB 刚好。256 GB 机器什么都不用调。
+- 配额：*Running On-Demand G and VT instances* ≥ 16（4xlarge）/ ≥ 32（8xlarge）；镜像 Ubuntu 24.04 + `nvidia-driver-580-open`；给用户 passwordless sudo；原生 BE 的 `storage_root_path` 从第一次启动起就定在 NVMe。按需不用 Spot。费用：一天 $72 / $108 + CPU 机半天 $26 / $51。
+
 ## 3. 被测系统与参照
 
 | 代号 | 系统 | 数据入口 | 执行硬件 | 作用 |
@@ -138,7 +146,7 @@ SF100 的额外成本：生成 ≈5～10 min（tpchgen-rs，8～16 核）、Duck
 | engine_ms（次） | 没有（A 的引擎时间用 FE 审计日志的 `fragment_rpc_phase_1 + …` 近似，或单独一轮 `enable_profile=true` 看 profile，本次没做） | BE 日志 `query executed on the engine` 的 `engine_ms`（`SiriusContext::execute_substrait`，含 parquet 读） | 拆出 FE/协议开销：B 的 wall − engine 在 SF1 是 100～330 ms/条，SF10 下占比变小 |
 | FE 审计（`fe-audit.py`） | `fe.audit.log` 每条查询的 `Time(ms)`（FE 端到端）、`PlanTimesMs.plan`、`ScheduleTimesMs.schedule_time_ms / fragment_rpc_phase_1_time_ms`、`CpuTimeMS`、`PeakMemoryBytes`、`ScanBytes/ScanRows`（BE 上报；伪 BE 全 0） | 同 | 按客户端窗口 `[start_ms, end_ms]` 与 `QueryId` 对上；审计日志有几秒的异步落盘延迟，轮次结束后再 join |
 | speedup | — | — | `A.wall / B.wall`（热中位数），每条一个；**几何平均**做总评；另给 power 总时间比；T1′ 再给 **每美元**口径（`A′.wall × $A′ / (B.wall × $B)`） |
-| GPU 峰值显存 / 降级 | — | `nvidia-smi --query-gpu=memory.used -lms 200` 采样 + `log/telemetry/<query_id>/memory*.ndjson` | 判断是否触发 host/disk 降级 |
+| GPU 利用率 / 显存 / 降级 | — | `bench.sh` 采样器每 0.5 s 记 `nvidia-smi` 的 `utilization.gpu`（有 kernel 在跑的时间占比）、`utilization.memory`（显存控制器忙的占比）、`memory.used`（= RMM 预留的池子，不是峰值），按查询窗口取均值；降级看 telemetry `batch_placement` 的 tier | 回答"GPU 被吃到几成"；判断是否触发 host/disk 降级 |
 | CPU / RSS | `/proc/<pid>/status`、`/proc/<pid>/stat` 采样（BE 进程） | 同（伪 BE 进程） | Doris 是否吃满核；伪 BE 的 CPU 占用（解码在 GPU，CPU 应很低） |
 | 读盘量 | `/proc/<pid>/io` `read_bytes` 前后差 | 同 | 证明冷/热定义成立（热跑 ≈ 0；B 默认 O_DIRECT 每轮 ≈ 数据集大小） |
 | 正确性 | validate 结论 | 同 | 不过的不计入 |
