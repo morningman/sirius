@@ -90,7 +90,17 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
 - [ ] A0.7 **上游落地**（ADR-011 D-1 修订：A0 跑通后才做）：上游 Draft PR `sirius-db/sirius:dev ← morningman/sirius:experimental-doris`（CONTRIBUTING Self-contained 路径，按「PR reviewability」清单写，保持 Draft）+ re-open #137 贴链接与现状。
       **开 PR 前先把 `plan-doc/` 从分支拿掉**（09-18 晚起 plan-doc 随 `experimental-doris` 提交，只为两台机器同步；不属于上游）
 
-### [ ] 轨 1 · Doris vs Doris+Sirius 性能对比（T0 本机 SF10 跑通，T1 机型 SF100 出主表）← **方案草案 2026-09-19，待拍板**：`experiments/sf10-bench/plan.md`（参考 Sirius CIDR'26 论文 / Sirius 仓库 harness / Doris 官方 TPC-H / ClickBench 的口径；机型建议 T0 现用 g4dn → T1 **g6e.4xlarge** 主结论 → T1′ 同价 CPU 机 c7i.12xlarge → T2 可选加测 p5.4xlarge/g7e 只跑 Sirius 侧；A 原生 BE vs B 伪 BE 同 FE 同 parquet；1 冷 + 3 热；结果进 `experiments/sf10-bench/results.md`）
+### [~] 轨 1 · Doris vs Doris+Sirius 性能对比（T0 本机 SF10 跑通 ✅，T1 机型 SF100 出主表 ⏳）← 方案 `experiments/sf10-bench/plan.md`（2026-09-19 拍板：§12 Q1/Q2/Q3/Q5 按建议），T0 结果 `experiments/sf10-bench/results.md`
+
+- [x] B0 用户拍板 §12（Q1 挂 NVMe ✅ 已挂 `/mnt/nvme`；Q2 g6e.4xlarge；Q3 要 c7i.12xlarge 成本对齐；Q5 做参照 C；Q4 等主结论；Q6 1 冷 + 3 热）← **2026-09-19**
+- [x] B1 数据：SF10 parquet 生成到 NVMe（24 s，3.6 GB，一表一文件 `part.0.parquet`）+ DuckDB 基线 `tests/expected/tpch-sf10/`（19 s，1.6 MB gz，进仓库）← **2026-09-19** → 产出：`/mnt/nvme/tpch_parquet_sf10`、`tests/expected/tpch-sf10/`
+- [x] B2 原生 BE 落地：`scripts/fetch-be.sh`、`scripts/be-native.sh`、`conf/be.conf`（`user_files_secure_path = /`、端口 91xx、`priority_networks`）、`sql/session-native.sql` + `session-native-split.sql` ← **2026-09-19** → 产出：`.doris-be/be`（4.6 GB），`SHOW BACKENDS` 两个 BE
+- [x] B3 跑通验证：原生 BE 外表路径 **SF1 22/22、SF10 22/22** 过校验（Q1 `avg` 同样差 1 ulp）← **2026-09-19** → 产出：`log/bench/sf1-native/`、`log/bench/sf10-native/`
+- [x] B4 跑批工具：`scripts/bench.sh`（切 BE + DROPP 伪 BE + 等 Alive、会话变量、`evict-cache.py --drop-caches`、每轮 `run-tpch.sh` / `run-tpch-duckdb.sh` + 校验 + `fe-audit.py`、0.5 s 采样、`env.txt`/`variables.txt`）、`scripts/bench-all.sh`、`scripts/bench-report.py`、`scripts/run-tpch-duckdb.sh`、`scripts/fe-audit.py`、`scripts/evict-cache.py`、`scripts/olap-load.sh`、`conf/sirius-bench.yaml`；`run-tpch.sh --session-sql/--db`、`tpch-views.sql` 改 OR REPLACE ← **2026-09-19** → 产出：`experimental/doris/scripts/*`，README「Benchmark」一节
+- [x] B5～B8 T0 上 SF10 全部系统 4 轮：A `native`、A-split `native-split`、B `sirius`、B′ `sirius-buffered`、R1 `duckdb`、R2 `duckdb-gpu`、C `native-olap` ← **2026-09-19** → 产出：`log/bench/sf10-*/`（本机，不进仓库）
+- [x] B9 报告：`bench-report.py report` → `experiments/sf10-bench/results.md`（T0 数字，标注 T4 下限）← **2026-09-19**
+- [ ] B10 **T1**：g6e.4xlarge（先申请 G 系列配额 ≥ 32 vCPU）按 `environment.md` 搭环境（pixi + 引擎 45 min + `fetch-fe/fetch-be` + NVMe），`bench-all.sh` 先 SF10（验证环境）再 **SF100**（`tpchgen-cli -s 100`、基线到 NVMe 不进仓库、`conf/sirius-bench.yaml` 的 host tier 自动按 RAM 算）；`duckdb-gpu-pinned` 在 48 GB 显存上可跑；T1′ c7i.12xlarge 只跑 `native`/`native-split`（`--price` 给两台的价）
+- [ ] B11 T2 可选加测（p5.4xlarge / g7e.2xlarge 只跑 Sirius 侧）——等 T1 主结论后由用户定（§12 Q4）
 
 ### [ ] 轨 1 MVP-A · 真 fragment（store-and-forward；依赖 #1791 + #1792 `891d41c3`）
 ### [ ] 轨 1 MVP-B · 多节点（Arrow-over-gRPC 先，NIXL 后；依赖 #1792 `d7f2a7e3`）

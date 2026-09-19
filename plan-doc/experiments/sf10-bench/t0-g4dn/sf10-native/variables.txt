@@ -1,0 +1,16 @@
+parallel_pipeline_task_num	0
+experimental_enable_local_shuffle	true
+enable_parallel_result_sink	true
+runtime_filter_mode	GLOBAL
+enable_cte_materialize	true
+experimental_topn_lazy_materialization_threshold	1024
+file_split_size	0
+max_file_split_size	67108864
+max_initial_file_split_size	33554432
+file_split_size_on_be	67108864
+file_split_size_on_fe	536870912
+max_file_scanners_concurrency	16
+enable_file_scanner_v2	true
+enable_fold_constant_by_be	false
+enable_profile	false
+query_timeout	3600

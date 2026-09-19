@@ -6,9 +6,12 @@
 
 ## 当前状态
 
-**日期**：2026-09-19（第十一次 session，GPU 机上的第二次）
-**阶段**：**轨 1 · MVP-A0 · A0.4～A0.6 完成——引擎在本机编成，引擎路径 BE 起来，TPC-H SF1 22/22 在 T4 上与 DuckDB 基线一致，每条查询有引擎时间。用户决定下一个 session 先做 SF10 的 Doris vs Doris+Sirius 性能对比（方案已写好：`experiments/sf10-bench/plan.md`），A0.7 上游落地往后排。** 本机 = AWS **`g4dn.2xlarge`**（Tesla T4 16 GB CC 7.5、8 vCPU、30 GB、根卷 300 GB；Ubuntu 24.04.4、驱动 580.178.04 / CUDA 13.0），仓库 `/home/yy2/gpu/sirius`（`origin` = fork，分支 `experimental-doris`）。
-**代码**：三处——(a) `experimental/doris/`：`conf/sirius.yaml`、`be.sh --engine` 运行时环境、`validate_tpch_results.py --ulps`、`run-tpch.sh` 的 `--ulps/--tolerance/--be-log` + `timings.csv`、BE 每条查询的引擎计时日志、日志去 ANSI；(b) **引擎两处修复**（`src/op/sirius_physical_hash_join.cpp`、`src/planner/sirius_plan_comparison_join.cpp`，见 G-31/G-32）——这是第一次动 `experimental/` 之外的代码，上游要单独提 PR；(c) plan-doc。commit 见下方「本次提交」；上一 session 的 `351347bf` + `e63ed24f` 和本次的**都还在本机没 push**（GPU 机没有 GitHub 凭据）。
+**日期**：2026-09-19 晚（第十二次 session，GPU 机上的第三次）
+**阶段**：**轨 1 · Doris vs Doris+Sirius 基准 · T0 跑通——整套跑批脚本写好并在本机 SF1/SF10 上跑通 7 个系统（每个 4 轮 × 22 条全部过 DuckDB 基线校验），T0 结果在 `experiments/sf10-bench/results.md`；下一步是换 T1 机型（g6e.4xlarge）跑 SF10 + SF100 出主表。** A0.7 上游落地仍往后排。本机 = AWS **`g4dn.2xlarge`**（T4 16 GB、8 vCPU、30 GB；**09-19 晚起有 sudo**，实例盘已挂 `/mnt/nvme`），仓库 `/home/yy2/gpu/sirius`（`origin` = fork，分支 `experimental-doris`）。
+**代码**：全部在 `experimental/doris/`（plan §9 的清单，README「Benchmark」一节是用法）：`scripts/{fetch-be,be-native,bench,bench-all,run-tpch-duckdb,olap-load}.sh`、`scripts/{bench-report,fe-audit,evict-cache}.py`、`conf/{be.conf,sirius-bench.yaml}`、`sql/session-native{,-split}.sql`、`tests/expected/tpch-sf10/`；改了 `run-tpch.sh`（`--session-sql/--db`、`start_ms/end_ms`）、`sql/session.sql`（钉 `file_split_size_on_be/on_fe`、关 `enable_sql_cache`）、`sql/tpch-views.sql`（OR REPLACE）、`conf/fe.conf`（`remote_fragment_exec_timeout_ms`）、`doris-version.sh`（`DORIS_BE_DIR`）、`.gitignore`。**翻译器 / 伪 BE 执行路径 / 引擎没动。** commit **`547f799e`**（代码）+ 本次 docs commit；连同上一 session 的，本机所有 commit **都还没 push**。
+
+T0（T4）SF10 热跑 22 条合计：Doris stock 52.0 s、Doris `file_split_size_on_be=0` 46.7 s、Doris 内表 11.4 s、**Doris+Sirius O_DIRECT 54.5 s（盘 0.4 GB/s 的成绩）、Doris+Sirius 走 page cache 20.9 s**、DuckDB 8 线程 17.1 s、Sirius 透明路径 O_DIRECT 54.3 s。主表口径（A-split vs B′）**几何平均 2.04×、总时间 2.23×**；伪 BE 相对 Sirius 自己规划几乎零开销（0.99×）；T4 上的 Sirius ≈ 8 线程 DuckDB。细节与解读全在 `results.md` §2。
+
 **上游**：无变化（未回帖，未开 PR）。A0 已跑通 → ADR-011 D-1 修订的前置条件满足，可以开上游 Draft PR / re-open #137 了。
 
 A0.4～A0.6 实测摘要（`tasklist.md` 有完整数字）：
@@ -75,21 +78,22 @@ wall − engine ≈ 100–330 ms/条 = FE 规划 + `exec_plan_fragment_prepare/s
 
 ## 下一步
 
-**下一个 session 从「Doris vs Doris+Sirius 性能对比」开始**（本机只跑 SF10 把流程跑通；正式主表在 g6e.4xlarge 上用 **SF100**，见方案 §5.0）（用户 09-19 拍板；方案 **`experiments/sf10-bench/plan.md`**，已参考 Sirius CIDR'26 论文 / Sirius 仓库 harness / Doris 官方 TPC-H / ClickBench 的口径，含机型建议与 EC2 可购性）。开工顺序：
-1. 先让用户拍板方案 **§12 的 Q1～Q6**——尤其 Q1（本机 `sudo` 挂实例盘 NVMe，一条命令在 §12 里）和 Q2（正式机型 g6e.4xlarge，要先申请 G 系列 vCPU 配额）；没拍板的按"建议"列默认执行。
-2. 在本机（T0，g4dn）按 **§8 步骤 1～9** 跑通：SF10 数据 + DuckDB 基线 → 官方 BE 4.1.4 落地（`fetch-be.sh` / `be-native.sh` / `conf/be.conf` / `sql/session-native.sql`，`SKIP_CHECK_ULIMIT=true` 绕开 `vm.max_map_count`）→ `bench.sh`（切 BE 等 Alive、1 冷 + 3 热、`evict-cache.py`、采样）→ A / B / B′ / R1 / R2 → `bench-report.py` → `experiments/sf10-bench/results.md`。要新写的文件清单在 **§9**，公平性规则在 **§6**，指标在 **§7**。
-3. 换 T1 机型（g6e.4xlarge）后按 `environment.md` 搭环境，步骤 1、5～9 重跑一遍出主表。
-记住 T0 的数字只能标注"T4 下限"，不能当结论（§10.1）。
+**下一个 session：T1 机型上出主表**（用户 09-19 拍板 §12：主机 g6e.4xlarge $3/h，成本对齐 CPU 机 c7i.12xlarge，做参照 C；T2 等主结论）。用户侧先做：申请 G 系列 vCPU 配额 ≥ 32（1～2 个工作日）、push 本机 commit（见下）。机器到手后：
+1. 按 `environment.md`「GPU 机」搭环境：pixi（根 + `experimental/doris`）→ `pixi run make TEST_BUILD_TARGET=`（45 min@8 vCPU，16 vCPU 快些）→ `fe-fetch` / `fetch-be.sh` → NVMe `mkfs.ext4 + mount /mnt/nvme`（**先 `dd if=<big file> of=/dev/null bs=1M iflag=direct` 量读速**，本机只有 0.4 GB/s）→ 起 FE。**原生 BE 第一次起来用的 `storage_root_path` 就定死在 NVMe（`be-native.sh` 默认），之后别改。**
+2. SF10 先跑一遍验证环境：`tpchgen-cli -s 10 --format=parquet --parts=1 --output-dir=/mnt/nvme/tpch_parquet_sf10` + 改名 `part.0.parquet` → `bench-all.sh --data /mnt/nvme/tpch_parquet_sf10 --rounds 4 --price native-split=3.004 --price sirius-buffered=3.004`（6 个系统 ≈25 min）→ `--systems native-olap --load-olap`；**跑的时候不要碰 FE 的 GLOBAL 变量**。
+3. SF100：`tpchgen-cli -s 100`（≈36 GB parquet，NVMe 上几分钟）→ 基线 `validate_tpch_results.py expected --data … --out /mnt/nvme/expected-sf100`（不进仓库，Q11/Q16 几百万行）→ `bench-all.sh --data /mnt/nvme/tpch_parquet_sf100 --expected` 不支持 → 用 `bench.sh --expected /mnt/nvme/expected-sf100` 逐系统跑，或给 `bench-all.sh` 加 `--expected` 转发（一行）。加 `duckdb-gpu-pinned`（48 GB 显存能 pin SF10；SF100 试 `SIRIUS_PIN_TIER=host`）。看 telemetry 里哪几条走了 host tier（`log/bench/<run>/telemetry/*/batch_placement`）。
+4. T1′：c7i.12xlarge 上只搭 FE + 原生 BE（不需要 GPU 环境、不编引擎：`pixi install -e fe` + `fetch-fe/fetch-be`），跑 `native`/`native-split`/`native-olap`，`bench-report.py report --runs <两台的目录> --price native-split=2.14 --price sirius-buffered=3.004` 出每美元加速比。
+5. 报告：`results.md` 现在是 T0 的；T1 出来后改成主表 SF100 + 规模表（SF1/SF10/SF100）+ T0 附录。
 
-**之后 A0.7 · 上游落地**（`tasklist.md` A0.7；ADR-011 D-1 修订的前置条件"A0 跑通"已满足），MVP-A。本机状态：FE（9030）和**引擎路径 BE**（pid 见 `experimental/doris/log/be.pid`）**还在跑**；`/tmp/tpch-sf1` 软链在（**重启后要重建**：`ln -sfn /home/yy2/gpu/sirius/test_datasets/tpch_parquet_sf1 /tmp/tpch-sf1`）。`PATH` 里要有 `~/.pixi/bin`。
+**之后 A0.7 · 上游落地**（`tasklist.md` A0.7；ADR-011 D-1 修订的前置条件"A0 跑通"已满足），MVP-A。本机状态：FE（9030）**还在跑**，两个 BE 都停了（`be.sh start --engine` / `be-native.sh start` 随时起；本机的原生 BE 要 `DORIS_BE_STORAGE="/mnt/nvme/doris-storage;<repo>/experimental/doris/.doris-be/storage"`，见已知坑）；`/tmp/tpch-sf1`、`/tmp/tpch-sf10` 软链在（**重启后要重建**，NVMe 也要重新挂/重生成，见 `environment.md`）。`PATH` 里要有 `~/.pixi/bin`。
 
-1. **先 push**（本机没凭据，用户来推或在本机 `gh auth login` / 配 SSH key）：`git push origin experimental-doris`。Mac 上开工前 `git pull --ff-only`。**本机现在有 10 个未 push 的 commit**（`351347bf`…`cfc8c04b`）。
+1. **先 push**（本机没凭据，用户来推或在本机 `gh auth login` / 配 SSH key）：`git push origin experimental-doris`。Mac 上开工前 `git pull --ff-only`。**本机现在有 12 个未 push 的 commit**（`351347bf`…本次两个）。
 2. **A0.7-a 引擎修复单独提上游**（两处都在 `src/`，与 `experimental/doris/` 无关，按 CONTRIBUTING 的 Self-contained 路径各开一个小 PR，base `dev`）：
    - `src/op/sirius_physical_hash_join.cpp::get_next_task_hint`：未定尺寸的 MARK join 返回 `WAITING_FOR_INPUT_DATA(build 生产者)` 而不是让 `refresh_cross_schedule` throw（G-31；复现：一个 `NOT IN (子查询)` 的 MARK join 作为上层 inner join 的 probe 源，透明路径要用 Substrait/FFI 才碰得到，或写一个 C++ 单测构造 STANDARD 模式的 MARK join 轮询）；
    - `src/planner/sirius_plan_comparison_join.cpp::materialize_expression_join_keys`：不等值条件侧也物化（G-32；复现：`cast(a as DECIMAL(38,5)) < 0.2 * b` 作为 join condition——透明路径要绕开 DELIM_JOIN，例如两表 `JOIN … ON a.k = b.k AND a.x < 0.2 * b.y`）。
    提 PR 前跑根仓库 `pixi run make test`（C++ 单测 `sirius_unittest` 本机还没编，`TEST_BUILD_TARGET=` 跳过了；估计 +10–15 min）；要写 Catch2 单测的话看 `test/cpp/` 里 hash join 的既有用例。
 3. **A0.7-b Doris 伪 BE 上游 Draft PR** `sirius-db/sirius:dev ← morningman/sirius:experimental-doris`：**先把 `plan-doc/` 从分支拿掉**（最后一个 commit `git rm -r plan-doc`，或在一条不含 plan-doc 的分支上 cherry-pick 代码 commit），按 CONTRIBUTING「PR reviewability」清单写描述（README 已是入口；把 A0.5 的 22/22 + timings 贴上），保持 Draft；re-open #137 贴链接与现状。引擎修复的两个 commit 要么先合、要么在这个 PR 里说明依赖。
-4. **SF10**：`test_datasets/tpchgen-rs/target/release/tpchgen-cli -s 10 --format parquet`（SF1 是 16 s，SF10 约 3 min，≈2.5 GB；一表一文件要 `--parts`/分区参数看一下，语料按 `part.0.parquet` 路径，多文件时 `local()` glob 会给多个 range——翻译器 `scan_ranges.rs` 支持多文件？未验）→ `validate_tpch_results.py expected --data … --out tests/expected/tpch-sf10`（DuckDB 8 vCPU 估 1–2 min）→ `run-tpch.sh --data … --expected tests/expected/tpch-sf10 --out log/tpch-sf10`。16 GB 显存：SF10 lineitem ≈ 6 GB 列存，join 中间态可能触发 host/disk 降级（`conf/sirius.yaml` 的 spill 段已配到 `log/sirius-spill`），观察 `log/telemetry` 与 `nvidia-smi`。
+4. ~~SF10~~ 已做（本 session）：数据在 `/mnt/nvme/tpch_parquet_sf10`，基线 `tests/expected/tpch-sf10/`，`run-tpch.sh --data /tmp/tpch-sf10 --expected tests/expected/tpch-sf10` 22/22；16 GB 显存跑 SF10 没有降级。
 5. 之后 MVP-A（真 fragment，依赖 #1791 + #1792 `891d41c3`）。
 
 已知会在 GPU 上遇到的事——**A0.5 后更新**：`avg(DECIMAL)` 的 DOUBLE→DECIMAL(38,4) 在 GPU 上截断（G-19，`--ulps 1` 兜住）；`sum(TINYINT)`（Q12）精确、`count(DISTINCT)`（Q16）精确、零度量 group-by（G-13）精确、cross join 常量 key 等值 join（Q7/Q11/Q22）正常、`year()` cast 正常、9～25 个恒等 Project 只影响时间。空 build 的 MARK join（`NOT IN` 子查询无行）A0 语料没覆盖，G-31 修复后行为是「等 build 生产者」，透明路径探针正常，值得在 MVP-A 加探针。
@@ -111,6 +115,20 @@ wall − engine ≈ 100–330 ms/条 = FE 规划 + `exec_plan_fragment_prepare/s
 ---
 
 ## 已知坑（累积，发现一条加一条）
+
+### 🔴 SF10 基准跑通实测（2026-09-19 晚，GPU 机；`experiments/sf10-bench/`、`scripts/bench*.sh`、原生 BE）
+
+- **伪 BE 只要在 FE 上注册着（哪怕 Alive=false），Doris 原生 BE 的自动并行度就是 1**：`parallel_pipeline_task_num = 0` → `SystemInfoService.getMinPipelineExecutorSize()` 取**所有已注册** BE 的 `pipelineExecutorSize` 最小值，伪 BE 从不发 `FrontendService.report`（`TReportRequest.num_cores / pipeline_executor_size`），FE 里默认 1（`SHOW BACKENDS` 的 CpuCores 列 = 1）。profile 里 `Parallel Fragment Exec Instance Num: 1`；`ALTER SYSTEM DROPP BACKEND '127.0.0.1:9050'` 后变 4。`bench.sh` 跑原生系统前自动 DROPP（伪 BE 无 tablet，`be.sh start` 时自动重注册）。**MVP-A 要在 `node.rs` 补 report RPC。**
+- **Doris 4.1.4 的文件切分是两级的，SF10 起会撞上伪 BE 的整文件约束**：`enable_file_scanner_v2 + file_split_size_on_be`（64 MB）打开时 FE **无视 `file_split_size`**、按 `file_split_size_on_fe`（512 MB）切字节范围（`FileQueryScanNode.selectFeSplitSizeForBe`），2.4 GB 的 lineitem 来 5 段 → 翻译器 `scan_ranges.rs` 报 "byte-range splits are not supported"。SF1 的文件全 < 512 MB 所以 A0.5 从没碰到。`sql/session.sql` 现在钉 `file_split_size_on_be = 0` + `file_split_size_on_fe = 1 TB`（+ 原来的 `file_split_size = 1 TB`）；`session-native.sql` 把两者还原成默认。**三个 session 文件的变量集合必须一致**（GLOBAL 变量存 FE 元数据，残留会串到下一个系统）。
+- **单文件 `local()` 表在 4.1.4 默认切分下 SF1 只有 1 个 scanner 干活**（profile `NumScanners: 64`，`PerScannerRunningTime` 只有一个是秒级）；`SET file_split_size_on_be = 0`（FE 侧切 32/64 MB）→ 16 个 scanner，Q1 1.4 s → 0.65 s。SF10（文件被 FE 切成 5 段）stock 已经能用 ≈4 核。所以基准里 stock（`native`）和 `native-split` 两个都跑，主表对 `native-split`。
+- **跑 benchmark 时绝对不要手工碰 FE 的 GLOBAL 变量**：我在 `sirius` 系统跑到一半时手动套了 `session-native-split.sql` 复现问题，把那一轮全污染了（22 条 "byte-range splits"），只能整体重跑。想复现问题就等 `bench-all.sh` 结束。
+- **原生 BE 的 `local()` 要 `user_files_secure_path = /`**（默认 `${DORIS_HOME}`，`safe_glob` 会把它拼在路径前面，读不到 `/tmp` 或 `/mnt` 下的数据）；`priority_networks = 127.0.0.0/8` 必须有，否则 BE 拒绝 FE 的心跳（"backend ip saved in master does not equal to backend local ip"）；`SKIP_CHECK_ULIMIT=true` 绕过 `vm.max_map_count/swap/ulimit` 三项检查；BE 自己几秒后才写 `bin/be.pid`，`start_be.sh --daemon` 返回时文件还不在。
+- **FE 的 `remote_fragment_exec_timeout_ms` 默认 30 s**：伪 BE 在 `exec_plan_fragment_prepare` RPC 里同步跑完整条查询，SF10 慢查询会撞上；已在运行时 `ADMIN SET FRONTEND CONFIG` 调到 600 s 并写进 `conf/fe.conf`（本次 T4 上最慢的 Q21 O_DIRECT 6.7 s，还没撞到，但 SF100 一定会）。
+- **Sirius 默认 O_DIRECT 意味着每条查询都从盘重读整张表**：SF10 上 Q6 引擎时间 1.6 s（O_DIRECT）vs 0.42 s（`use_odirect: false` 走 page cache），Q9 4.5 vs 1.2 s——这台 NVMe（实例盘）顺序读大约 1.5 GB/s，2.4 GB 的 lineitem 就是 1.5 s 起步。热跑主对照必须用 B′（`sirius-buffered`）。
+- **FE 审计日志异步落盘（几秒）**，`fe-audit.py` 在轮次结束后按客户端时间窗 + QueryId join；mysql 客户端每次连接会先发 `select @@version_comment` / `select $$`（后者在 Doris 上报错，无害），匹配时要按 `Db` 非空过滤。`ScheduleTimesMs.fragment_rpc_phase_1_time_ms` 对伪 BE 就是引擎时间 + 几十 ms；`CpuTimeMS/PeakMemoryBytes/ScanBytes` 伪 BE 全 0（不上报）。
+- **DuckDB shell 的 `.timer` 行永远走 stdout**（不跟 `.output` 走），`run-tpch-duckdb.sh` 靠 `.print __Q__` 标记 + 第二条 `Run Time` 行取时间；Sirius 透明路径进程退出时打一条 Rust TLS panic（`cannot access a Thread Local Storage value during or after destruction`），无害。
+- `tpchgen-cli --parts=1` 的文件名是 `<table>/<table>.1.parquet`，不是 SF1 语料的 `part.0.parquet`（上游 `generate_tpch_data.sh` 改的名）；生成后改名保持一致。SF10 生成只要 24 s（8 线程，NVMe）；DuckDB SF10 基线 19 s。
+- Doris 原生跑外表的 `avg(DECIMAL)` 也和 DuckDB 差 1 ulp（Q1 7 个值），`--ulps 1` 同样兜住；Q11 并列换序。**原生 BE 外表路径 SF1/SF10 都 22/22**。
 
 ### 🔴 A0.5/A0.6 GPU 差分实测（2026-09-19，GPU 机；`run-tpch.sh` 执行模式、引擎两处修复）
 
@@ -397,6 +415,11 @@ wall − engine ≈ 100–330 ms/条 = FE 规划 + `exec_plan_fragment_prepare/s
 
 <details>
 <summary>历史记录</summary>
+
+### 2026-09-19 晚（第十二次，GPU 机）
+基准方案 §12 拍板（NVMe 挂了、g6e.4xlarge + c7i.12xlarge、做参照 C），T0 全流程跑通：`fetch-be.sh`/`be-native.sh`/`conf/be.conf`、`session-native{,-split}.sql`、`bench.sh`/`bench-all.sh`/`bench-report.py`/`run-tpch-duckdb.sh`/`fe-audit.py`/`evict-cache.py`/`olap-load.sh`、`conf/sirius-bench.yaml`、SF10 数据 + 基线（`547f799e`）。
+SF10 在 T4 上 7 个系统各 4 轮全部过校验，`experiments/sf10-bench/results.md`：A-split vs B′ 几何平均 2.04×，B 默认 O_DIRECT 被 0.4 GB/s 的实例盘卡住（≈A），伪 BE 相对透明路径零开销，T4 上的 Sirius ≈ 8 线程 DuckDB，Doris 内表比外表快 4.6×。
+跑通过程中发现并进脚本的坑：伪 BE 注册着压 Doris 并行度到 1（DROPP）、4.1.4 两级文件切分在 SF10 上切 512 MB 段（session.sql 钉 on_be=0/on_fe=1T）、单文件外表 stock 只有 1 个 scanner（native-split）、FE `enable_sql_cache` 默认开、原生 BE storage 路径不能变、刚停的 BE 在 FE 上还 Alive、无 BE 时 `SELECT 1` 失败、FE 30 s RPC 超时。下一步 T1 机型出主表。
 
 ### 2026-09-19（第十一次，GPU 机）
 A0.4～A0.6 全部完成。A0.4：`duckdb`/`cucascade` 浅拉，根 pixi 环境 26 s，`pixi run make TEST_BUILD_TARGET=` 45 min 编出 `sirius.duckdb_extension` + 独立 `libsirius.so`；doris default 环境 11 s，`cargo build --release` 3 min；新增 `conf/sirius.yaml`（host pin 12Gi、spill/telemetry 进 `log/`），`be.sh start --engine` 补齐运行时环境；引擎 BE 4 s bring-up、Alive。
