@@ -40,7 +40,7 @@
 | g5.2xlarge | A10G · 24 GB · 600 GB/s · CC 8.6 | 8 / 32 GB | 450 GB | 1.212 | 便宜档，显存仍小 |
 | g6e.2xlarge | L40S · 48 GB GDDR6 · 864 GB/s · CC 8.9 | 8 / 64 GB | 450 GB | 2.242 | `doris-pseudo-be-plan.md` §4.2 的原推荐；CPU 侧只有 8 vCPU，Doris 吃亏 |
 | **g6e.4xlarge** | L40S · 48 GB · 864 GB/s · CC 8.9 | **16 / 128 GB** | 600 GB | **3.004** | **推荐主机型**（§2.2） |
-| g6e.8xlarge | L40S · 48 GB | 32 / 256 GB | 900 GB | ≈4.5（待核） | Doris 侧对齐官方报告的 32C 规格时用 |
+| **g6e.8xlarge** | L40S · 48 GB | 32 / 256 GB | **2×450 GB** | **4.529**（Vantage 09-19 核） | **T1 实际到手的机型**（09-19，用户拍板保留）；Doris 侧对齐官方报告的 32C 规格 |
 | g7e.2xlarge | RTX PRO 6000 Blackwell SE · 96 GB GDDR7 · ≈1.6 TB/s · CC 12.0 | 8 / 64 GB | 有（待核） | 3.363 | 2026-01 GA，**仅 us-east-1 / us-east-2**；Sirius `CUDAARCHS` 含 `120a/120` 但我们没在 Blackwell 上验证过 |
 | p5.4xlarge | H100 · 80 GB HBM3 · 3.35 TB/s · CC 9.0 | 16 / 256 GB | 有（待核） | 6.880 | T2 加测（只跑 Sirius 侧）；P 系列配额单独申请 |
 | c7i.8xlarge（CPU 对照） | — | 32 / 64 GB | — | 1.428 | ≈ g6e.2xlarge 的 2/3 价 |
@@ -77,7 +77,7 @@
 
 ### 2.5 SF100 采购清单（2026-09-19 晚，按 T0 实测补的账）
 
-- **T1 主机：g6e.4xlarge**（L40S 48 GB / 16 vCPU / 128 GB / 1×600 GB NVMe，$3.00/h）；预算允许就 **g6e.8xlarge**（32 vCPU / 256 GB / 1×900 GB，≈$4.5/h）——多花 $1.5/h 买 Doris 对齐官方报告的 32C、内存不用抠、更大更快的实例盘。**T1′ CPU 机：c7i.12xlarge**（$2.14/h，配 4xlarge）或 c7i.24xlarge（$4.28/h，配 8xlarge），只装 FE + 原生 BE。不买 g6e.2xlarge（8 vCPU）、g6（L4）、多卡。
+- **T1 主机：g6e.4xlarge**（L40S 48 GB / 16 vCPU / 128 GB / 1×600 GB NVMe，$3.00/h）；预算允许就 **g6e.8xlarge**（32 vCPU / 256 GB / **2×450 GB**，$4.529/h）← **09-19 实际到手的是 8xlarge**（两块实例盘做了 RAID0，`environment.md`）——多花 $1.5/h 买 Doris 对齐官方报告的 32C、内存不用抠、更大更快的实例盘。**T1′ CPU 机：c7i.12xlarge**（$2.14/h，配 4xlarge）或 c7i.24xlarge（$4.28/h，配 8xlarge），只装 FE + 原生 BE。不买 g6e.2xlarge（8 vCPU）、g6（L4）、多卡。
 - **盘**：根卷 gp3 300 GB（默认吞吐即可；本机用了 40 GB）；**数据全放实例盘**：SF100 parquet **≈36 GB**（按 SF10 实测 3.6 GB 推算，不是 §5.0 估的 25 GB）+ 内表 ≈40 GB + spill 100 GB + SF10/基线 → ≈200 GB，600 GB 够。停机即清，SF100 重生成只要几分钟。
 - **到手先量盘速**（`dd iflag=direct` 单流 + 4～8 路并发）：G 系列实例盘是共享盘切片、吞吐大致随容量走，本机 225 GB 只有 0.4 GB/s，600 GB 估 1 GB/s 上下。它决定 B（O_DIRECT）有多少是盘的数字；B′ 不受影响。EBS 替代不了（gp3 单卷 1 GB/s 上限，io2 受实例 EBS 带宽限制）。
 - **SF100 内存账**：GPU 池高水位 SF10 11.2 GB → SF100 ≈110 GB，L40S 43 GB 装不下 → 大 join 走 host tier（正是要看的）。128 GB 机器：host tier 默认 114 GiB（pinned）+ 36 GB page cache 超了 → B′ 用 `bench.sh --host-capacity 64Gi`，B 用默认；Doris `mem_limit` 70 % = 89 GB + page cache 36 GB 刚好。256 GB 机器什么都不用调。

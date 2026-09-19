@@ -1,6 +1,6 @@
 # 开发环境
 
-> 最后核对：2026-09-19 晚（GPU 机 Linux x86_64，第十二次 session；Mac 部分 2026-09-18）
+> 最后核对：2026-09-19（GPU 机换成 g6e.8xlarge，第十三次 session；Mac 部分 2026-09-18）
 
 ## 两个仓库
 
@@ -95,23 +95,23 @@ cd /Users/morningman/workspace/git/wt-gpu
 端口：FE 8030/9020/9030/9010，BE 9050/9060/8040/8060（Doris 默认），与 `doris-dev-deploy` 的本地集群不冲突。
 引擎路径（`sirius-engine` feature、`pixi run be-build`）只能在 Linux + NVIDIA 上跑（MVP-A0 起）。
 
-## GPU 机（AWS `g4dn.2xlarge`，2026-09-19 起）
+## GPU 机（AWS `g6e.8xlarge`，2026-09-19 起；09-19 早前是 `g4dn.2xlarge`，同一根卷原地改型）
 
 | 项 | 实测 |
 |---|---|
-| 实例 | `g4dn.2xlarge`，us-east-1；Tesla T4 16 GB（CC 7.5 = Sirius 下限）、8 vCPU Xeon 8259CL、30 GB 内存、无 swap |
-| OS / 驱动 | Ubuntu 24.04.4 LTS x86_64，内核 6.17 aws；NVIDIA **580.178.04**，`nvidia-smi` 报 CUDA 13.0；`/proc/sys/kernel/io_uring_disabled = 0`；无系统 CUDA toolkit（全靠 pixi） |
-| 盘 | 根卷 300 GB gp3（`/`，已用 ≈40 GB：根 pixi env 7.1 + doris default env 5.2 + build 树 2.2 + 官方 BE 4.6 + 其余）；实例盘 `nvme1n1` 209 GB **已 mkfs.ext4 挂到 `/mnt/nvme`（owner yy2，09-19 晚）**，上面有 `tpch_parquet_sf1/`（SF1 副本）、`tpch_parquet_sf10/`（3.6 GB，`<table>/part.0.parquet`）、`sirius-spill/`、`doris-storage/`（参照 C 的内表）。**停机即清**：重启后 `sudo mkfs.ext4 /dev/nvme1n1 && sudo mount /dev/nvme1n1 /mnt/nvme && sudo chown yy2 /mnt/nvme`，SF10 用 `tpchgen-cli -s 10 --format=parquet --parts=1 --output-dir=/mnt/nvme/tpch_parquet_sf10`（24 s）再把 `<table>/<table>.1.parquet` 改名 `part.0.parquet`，软链 `/tmp/tpch-sf10` |
-| 账户 | `yy2`，**09-19 晚起有 passwordless sudo**（`sudo -n true` 通过；`vm.max_map_count` 已调到 2,000,000）；系统只有 g++ 13.3 / make / git / python 3.12，**没有** cmake、ninja、unzip、java、gh、docker、rustup（全靠 pixi） |
+| 实例 | **`g6e.8xlarge`**（用户口头说的是 4xlarge，EC2 metadata 是 8xlarge，09-19 拍板保留），us-east-1c；**L40S 48 GB**（CC 8.9，PCIe 4.0 ×16，持久模式/ECC 已开）、32 vCPU AMD EPYC 7R13（有 AVX2 **无 AVX-512**）、248 GiB 内存、无 swap；按需价 **$4.529/h**（Vantage 2026-09-19）。T0 时期是 `g4dn.2xlarge`（T4 16 GB、8 vCPU Xeon 8259CL、30 GB、$0.752/h）——根卷从那台原地改型过来，pixi 环境 / 引擎 / FE / BE 全部保留 |
+| OS / 驱动 | Ubuntu 24.04.4 LTS x86_64，内核 7.0.0-1012-aws；NVIDIA **580.178.04**，`nvidia-smi` 报 CUDA 13.0；`io_uring_disabled = 0`；无系统 CUDA toolkit（全靠 pixi） |
+| 盘 | 根卷 300 GB gp3（`/`，已用 ≈48 GB；**冷读只有 ≈125 MB/s**：重启后第一次起 2.65 GB 的原生 BE 要 ≈2 min，热起 9 s，`be-native.sh` 等待上限已提到 300 s）；实例盘 **两块** `nvme1n1`/`nvme2n1` 各 419 GiB（8xlarge 是 2×450 GB，不是 plan 表里写的 1×900），**09-19 做成 RAID0 `/dev/md0`**（`mdadm --level=0 --chunk=512`，ext4 关 lazy init，`noatime`，824 GB，owner yy2）挂 `/mnt/nvme`；真实文件 O_DIRECT 读 **2.0–3.2 GB/s 单流、2.7 GB/s 并发**（T0 那台 0.4 GB/s）。上面有 `tpch_parquet_sf10/`（3.6 GB，`<table>/part.0.parquet`）、`doris-storage/`（原生 BE 唯一的 storage root，FE 09-19 清零重建后第一次见到的就是它）、`sirius-spill/`。**停机即清**：重启后 `sudo mdadm --create /dev/md0 --level=0 --raid-devices=2 --chunk=512 --run /dev/nvme1n1 /dev/nvme2n1 && sudo mkfs.ext4 -F -E lazy_itable_init=0,lazy_journal_init=0 /dev/md0 && sudo mount -o noatime /dev/md0 /mnt/nvme && sudo chown yy2 /mnt/nvme`，再 `sudo sysctl -w vm.max_map_count=2000000`（重启复位到 1,048,576），SF10 用 `tpchgen-cli -s 10 --format=parquet --parts=1 --output-dir=/mnt/nvme/tpch_parquet_sf10`（**5.7 s**）再把 `<table>/<table>.1.parquet` 改名 `part.0.parquet`，软链 `/tmp/tpch-sf10`；FE 元数据也要 `fe.sh clean` 重来（内表在 NVMe 上，root 一变就坏） |
+| 账户 | `yy2`，passwordless sudo；系统只有 g++ 13.3 / make / git / python 3.12 / mdadm，**没有** cmake、ninja、unzip、java、gh、docker、rustup（全靠 pixi） |
 | pixi | 0.81.0，`~/.pixi/bin`（`~/.bashrc` 已加 PATH）；包缓存 `~/.cache/rattler` |
-| 仓库 | `/home/yy2/gpu/sirius`，`origin` = fork `morningman/sirius`，分支 `experimental-doris`；submodule 已拉（都浅）：`experimental/doris/doris`（4.1.4）、`substrait`、`duckdb`、`cucascade`（`vcpkg` 不需要，没拉）；根 pixi 环境 `.pixi/envs/default` 已装（CUDA 13 + RAPIDS 26.08 + clang 21）；**引擎已编**：`build/release/extension/sirius/{sirius.duckdb_extension, libsirius.so.0.0.0}`（09-19，45 min；改引擎代码后 `pixi run make TEST_BUILD_TARGET=` 增量） |
-| `experimental/doris/` | `.pixi/envs/{be,fe,check,default}` 已装（`default` 含 `engine` 特性，是引擎路径 BE 的编译/运行环境，也是 `bench.sh` 要求的环境）；`.doris-fe/fe` = 官方 4.1.4；**`.doris-be/be` = 官方 BE 4.1.4（`scripts/fetch-be.sh`，4.6 GB）**，配置由 `scripts/be-native.sh` 从 `conf/be.conf` 模板生成（端口 9150/9160/8140/8160，`mem_limit` 21G，storage → `/mnt/nvme/doris-storage`）；`.duckdb-substrait/`（DuckDB 1.5.5 + substrait 扩展，≈2 GB）已编；`target/debug`（无引擎）和 `target/release`（链 `libsirius.so.0`）都已编；`conf/sirius.yaml` 是日常引擎配置，`conf/sirius-bench.yaml` 是 benchmark 模板 |
-| 数据 | `test_datasets/tpch_parquet_sf1/`（tpchgen-rs，246 MB，`<table>/part.0.parquet`；本机 `.git/info/exclude`），软链 **`/tmp/tpch-sf1`**（开机清 `/tmp`，重建：`ln -sfn /home/yy2/gpu/sirius/test_datasets/tpch_parquet_sf1 /tmp/tpch-sf1`）；**SF10 在 `/mnt/nvme/tpch_parquet_sf10`**（软链 `/tmp/tpch-sf10`；基线 `tests/expected/tpch-sf10/` 进了仓库）；生成器 `test_datasets/tpchgen-rs/target/release/tpchgen-cli` |
-| 进程 | FE：`pixi run -e fe fe-start|fe-stop`，`scripts/fe.sh status`；BE 引擎路径：**`pixi run bash scripts/be.sh start --engine`**（default 环境；缺省 `--sirius-config conf/sirius.yaml`）；BE 无引擎（translate-only）：`pixi run -e be bash scripts/be.sh start`；`be.sh stop|log`（`log/be.pid`）；**原生 BE：`pixi run bash scripts/be-native.sh start|stop|status`**；客户端 `.pixi/envs/fe/bin/mysql -h127.0.0.1 -P9030 -uroot -E`（`\G` 在 9.7 客户端里不能用）。FE 运行时改过 `remote_fragment_exec_timeout_ms=600000`（也写进了 `conf/fe.conf`） |
-| benchmark | `pixi run bash scripts/bench-all.sh --data /mnt/nvme/tpch_parquet_sf10 --rounds 4`（全部系统 + 报告 `log/bench/sf10-results.md`）；单个系统 `bench.sh --system …`；用法见 `experimental/doris/README.md`「Benchmark」 |
+| 仓库 | `/home/yy2/gpu/sirius`，`origin` = fork `morningman/sirius`，分支 `experimental-doris`；submodule 已拉（都浅）：`experimental/doris/doris`（4.1.4）、`substrait`、`duckdb`、`cucascade`（`vcpkg` 不需要，没拉）；根 pixi 环境 `.pixi/envs/default` 已装（CUDA 13 + RAPIDS 26.08 + clang 21）；**引擎已编且换卡不用重编**：`build/release/extension/sirius/{sirius.duckdb_extension, libsirius.so.0.0.0}`（`CMAKE_CUDA_ARCHITECTURES` 含 `89-real`，L40S 冒烟通过；改引擎代码后 `pixi run make TEST_BUILD_TARGET=` 增量） |
+| `experimental/doris/` | `.pixi/envs/{be,fe,check,default}` 已装（`default` 含 `engine` 特性，是引擎路径 BE 的编译/运行环境，也是 `bench.sh` 要求的环境）；`.doris-fe/fe` = 官方 4.1.4（**09-19 换机后 `fe.sh clean` 过，全新集群**）；`.doris-be/be` = 官方 BE 4.1.4（`scripts/fetch-be.sh`，4.6 GB），配置由 `scripts/be-native.sh` 从 `conf/be.conf` 模板生成（端口 9150/9160/8140/8160，`mem_limit` = 70 % RAM = 173G，storage → `/mnt/nvme/doris-storage`）；`.duckdb-substrait/`（DuckDB 1.5.5 + substrait 扩展，≈2 GB）已编（在 Xeon 上编的，换 CPU 后没验证）；`target/debug`（无引擎）和 `target/release`（链 `libsirius.so.0`）都已编，**换 CPU 后能跑**（cargo 没加 target-cpu）；`conf/sirius.yaml` 是日常引擎配置，`conf/sirius-bench.yaml` 是 benchmark 模板 |
+| 数据 | `test_datasets/tpch_parquet_sf1/`（tpchgen-rs，246 MB，`<table>/part.0.parquet`；本机 `.git/info/exclude`），软链 **`/tmp/tpch-sf1`**（开机清 `/tmp`，重建：`ln -sfn /home/yy2/gpu/sirius/test_datasets/tpch_parquet_sf1 /tmp/tpch-sf1`）；**SF10 在 `/mnt/nvme/tpch_parquet_sf10`**（软链 `/tmp/tpch-sf10`；基线 `tests/expected/tpch-sf10/` 进了仓库）；生成器 `test_datasets/tpchgen-rs/target/release/tpchgen-cli`——**上游脚本用 `RUSTFLAGS="-C target-cpu=native"` 编它，换 CPU（Xeon AVX-512 → EPYC）后 Illegal instruction，而且 cargo 指纹只记 flag 字符串不记 CPU，`cargo build` 会判"已是最新"**：09-19 `rm -rf target` 后用 pixi `be` 环境的 cargo 重编（1.5 min） |
+| 进程 | FE：`pixi run -e fe fe-start|fe-stop`，`scripts/fe.sh status`；BE 引擎路径：**`pixi run bash scripts/be.sh start --engine`**（default 环境；缺省 `--sirius-config conf/sirius.yaml`）；BE 无引擎（translate-only）：`pixi run -e be bash scripts/be.sh start`；`be.sh stop|log`（`log/be.pid`）；**原生 BE：`pixi run bash scripts/be-native.sh start|stop|status`**；客户端 `.pixi/envs/fe/bin/mysql -h127.0.0.1 -P9030 -uroot -E`（`\G` 在 9.7 客户端里不能用）。`remote_fragment_exec_timeout_ms=600000` 在 `conf/fe.conf` 里，`fe.sh start` 每次覆盖进去 |
+| benchmark | T1 的运行目录是 **`log/bench-t1/`**（`bench-all.sh --out-root log/bench-t1 --report log/bench-t1/<sf>-results.md --price native-split=4.529 --price sirius-buffered=4.529`），T0 的留在 `log/bench/`；单个系统 `bench.sh --system …`；用法见 `experimental/doris/README.md`「Benchmark」 |
 
-**能做什么**：Mac 能做的全部 + 编 Sirius 引擎 + 引擎路径 BE + GPU 差分 + 性能测量（T4 数字不代表 L40S）。三层验证（A0.4-0）和引擎路径（A0.4）都已过，见 `handoff.md`。
-**内存约束**：Sirius 默认 pin 90% 内存做 host tier，30 GB 机器上 BE 必须带 `--sirius-config` 把 `host.capacity_bytes` 限到 ≈12Gi（`doris-pseudo-be-plan.md` §4.2）——已固化在 `experimental/doris/conf/sirius.yaml`（GPU 90%、host 12Gi、spill `log/sirius-spill` 100Gi、Quent 遥测 `log/telemetry`），`be.sh start --engine` 缺省就用它。
+**能做什么**：Mac 能做的全部 + 编 Sirius 引擎 + 引擎路径 BE + GPU 差分 + 性能测量（**T1 主结论机**）。
+**内存约束**：248 GiB 机器上 `bench.sh` 自动算 host tier = min(90 %, RAM − 14 GiB) = **223 GiB**（pinned，first-touch 才真占）；`cudaMallocHost` 223 GiB 在 09-19 冒烟里起得来。日常 `conf/sirius.yaml` 仍是 host 12Gi（T0 时期定的，够 SF1/SF10 调试用）。
 
 ## Sirius 侧（只读参考期）
 

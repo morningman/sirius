@@ -6,115 +6,48 @@
 
 ## 当前状态
 
-**日期**：2026-09-19 晚（第十二次 session，GPU 机上的第三次）
-**阶段**：**轨 1 · Doris vs Doris+Sirius 基准 · T0 跑通——整套跑批脚本写好并在本机 SF1/SF10 上跑通 7 个系统（每个 4 轮 × 22 条全部过 DuckDB 基线校验），T0 结果在 `experiments/sf10-bench/results.md`；下一步是换 T1 机型（g6e.4xlarge）跑 SF10 + SF100 出主表。** A0.7 上游落地仍往后排。本机 = AWS **`g4dn.2xlarge`**（T4 16 GB、8 vCPU、30 GB；**09-19 晚起有 sudo**，实例盘已挂 `/mnt/nvme`），仓库 `/home/yy2/gpu/sirius`（`origin` = fork，分支 `experimental-doris`）。
-**代码**：全部在 `experimental/doris/`（plan §9 的清单，README「Benchmark」一节是用法）：`scripts/{fetch-be,be-native,bench,bench-all,run-tpch-duckdb,olap-load}.sh`、`scripts/{bench-report,fe-audit,evict-cache}.py`、`conf/{be.conf,sirius-bench.yaml}`、`sql/session-native{,-split}.sql`、`tests/expected/tpch-sf10/`；改了 `run-tpch.sh`（`--session-sql/--db`、`start_ms/end_ms`）、`sql/session.sql`（钉 `file_split_size_on_be/on_fe`、关 `enable_sql_cache`）、`sql/tpch-views.sql`（OR REPLACE）、`conf/fe.conf`（`remote_fragment_exec_timeout_ms`）、`doris-version.sh`（`DORIS_BE_DIR`）、`.gitignore`。**翻译器 / 伪 BE 执行路径 / 引擎没动。** commit **`547f799e`** + GPU 利用率采样的后续 commit（代码）、`39c8945d` + 后续（docs）；连同上一 session 的，本机所有 commit **都还没 push**。
+**日期**：2026-09-19（第十三次 session，GPU 机换型后的第一次）
+**阶段**：**轨 1 · Doris vs Doris+Sirius 基准 · T1 主表已出**——机器原地改型成 **`g6e.8xlarge`**（L40S 48 GB / 32 vCPU / 248 GiB / 2×450 GB NVMe RAID0，$4.529/h；用户说的是 4xlarge，metadata 是 8xlarge，拍板保留），SF100 / SF10 / SF1 三个规模全部系统跑完且每轮 22 条过校验，结果与解读在 **`experiments/sf10-bench/results.md`**（T1 正文，T0 附录）。A0.7 上游落地仍往后排。仓库 `/home/yy2/gpu/sirius`（`origin` = fork，分支 `experimental-doris`）。
+**代码**：本 session 只改了跑批脚本（`scripts/bench-all.sh` 加 `--expected`/`--host-capacity` 转发、`scripts/olap-load.sh` 建库前 `DROP DATABASE FORCE`、`scripts/be-native.sh` 起 BE 等 300 s）；**翻译器 / 伪 BE / 引擎没动**。docs：`environment.md`「GPU 机」重写、`handoff.md` 加「T1 换机实测」坑、`plan.md` §2 机型行、`tasklist.md` B10、`results.md` 重写。commit 见 git log（代码 / docs 分开）。
 
-T0（T4）SF10 热跑 22 条合计：Doris stock 52.0 s、Doris `file_split_size_on_be=0` 46.7 s、Doris 内表 11.4 s、**Doris+Sirius O_DIRECT 54.5 s（盘 0.4 GB/s 的成绩）、Doris+Sirius 走 page cache 20.9 s**、DuckDB 8 线程 17.1 s、Sirius 透明路径 O_DIRECT 54.3 s。主表口径（A-split vs B′）**几何平均 2.03×、总时间 2.22×**；伪 BE 相对 Sirius 自己规划几乎零开销（0.99×）；T4 上的 Sirius ≈ 8 线程 DuckDB；**GPU busy（`nvidia-smi utilization.gpu`）B′ 中位数只有 20 %**——引擎时间花在搬运/调度上而不是 GPU 算，T1 要看 PCIe 4.0 / 预取缓存 / `pin_table` 的效果。细节与解读全在 `results.md` §2。机型采购清单在 `plan.md` §2.5。
+T1 热跑 22 条合计（s）：
 
-**上游**：无变化（未回帖，未开 PR）。A0 已跑通 → ADR-011 D-1 修订的前置条件满足，可以开上游 Draft PR / re-open #137 了。
+| SF | A Doris 外表 | C Doris 内表 | B O_DIRECT | **B′ page cache** | R1 DuckDB 32 线程 | R2 透明路径 | R2-pinned | **A/B′** |
+|---|---|---|---|---|---|---|---|---|
+| SF100 | **154.8**（stock；split 205.9） | 18.0 | 141.7 | **98.6**（引擎 95.6） | 39.0 | 94.7 | — | **几何 1.34× · 总 1.56×** |
+| SF10 | **15.0**（split；stock 28.5） | 2.9 | 12.4 | **12.2**（引擎 10.0） | 4.1 | 7.9 | 2.0 | 1.09× · 1.23× |
+| SF1 | **5.23**（split；stock 8.07） | 1.76 | 3.12 | **3.25**（引擎 1.25） | 1.25 | 1.13 | 0.62 | 1.53× · 1.59× |
 
-A0.4～A0.6 实测摘要（`tasklist.md` 有完整数字）：
-- ✅ **A0.4 引擎路径**：`duckdb`/`cucascade` 浅拉 → 根 `pixi install` 26 s → `pixi run make TEST_BUILD_TARGET=` **45 min**（`sirius.duckdb_extension` + **独立 `libsirius.so.0.0.0`**）→ doris default 环境 11 s → `cargo build --release` 3 min → `pixi run bash scripts/be.sh start --engine`：bring-up ≈4 s，显存预留 13.5 GB，Alive。
-- ✅ **A0.5 22/22**：第一轮 15/22——Q16 让 BE **进程崩掉**（引擎 `std::terminate`，G-31）、Q17/Q20 引擎报错（G-32）、Q1 `avg` 末位截断（G-19）。前两个在**引擎里修**（各十来行，见 G-31/G-32 的出处），第三个校验器加 `--ulps 1` 接受截断并在结论里标出。最终 **22/22 OK + G-13 探针 2/2**；两处引擎修复后透明路径（`build/release/duckdb`）同一批 parquet 22 条也全部 GPU 执行且一致。
-- ✅ **A0.6 计时**：`run-tpch.sh` 执行模式写 `timings.csv`（wall_ms / engine_ms / query_id，engine 时间从 BE 日志的 `query executed on the engine` 行读回）。**SF1 · T4 热后引擎合计 2.7–2.8 s / 22 条**（下表），端到端 ≈5.9 s。
+五条要记住的结论（细节 `results.md` §2）：(1) 主表 1.34×/1.56×，赢在大扫描+大 join（Q3 5.2×、Q18 4.2×），输在 lineitem 窄扫描（Q21/Q14 0.63×）；T0 的 2.03× 是 8 核 Doris 的成绩。(2) **GPU busy 中位数 22 %**，SF10 pinned 2.0 s vs 引擎 10 s——瓶颈是 parquet 解码 + 搬运，不是算力。(3) **伪 BE 的 plan 比 DuckDB 自己规划的慢 1.42×（B vs R2，SF100 热，22 条全慢）**，怀疑 9～25 个恒等 Project + 重复 Sort，翻译器可修。(4) SF100 装得下 L40S：GPU 池高水位 35.6 GiB，无 host/disk 降级。(5) DuckDB 32 线程 39 s、Doris 内表 18 s 都比 B′ 快——诚实写进报告。
 
-### A0.6 计时（SF1，T4，2026-09-19，三轮：冷 / 热 / 热；单位 ms，engine = `SiriusContext::execute_substrait` 含 parquet 读；wall = mysql 客户端往返）
-
-| q | engine 冷 | engine 热 | engine 热 | wall 热 |
-|---|---|---|---|---|
-| q01 | 258 | 97 | 101 | 210 |
-| q02 | 209 | 179 | 178 | 508 |
-| q03 | 113 | 89 | 93 | 199 |
-| q04 | 107 | 59 | 65 | 133 |
-| q05 | 145 | 127 | 126 | 304 |
-| q06 | 70 | 60 | 57 | 102 |
-| q07 | 147 | 141 | 145 | 344 |
-| q08 | 186 | 200 | 171 | 443 |
-| q09 | 197 | 197 | 196 | 400 |
-| q10 | 164 | 155 | 159 | 307 |
-| q11 | 140 | 133 | 139 | 364 |
-| q12 | 97 | 84 | 80 | 162 |
-| q13 | 97 | 94 | 118 | 184 |
-| q14 | 74 | 76 | 112 | 195 |
-| q15 | 122 | 89 | 99 | 227 |
-| q16 | 113 | 85 | 88 | 203 |
-| q17 | 101 | 101 | 110 | 206 |
-| q18 | 124 | 118 | 122 | 267 |
-| q19 | 102 | 101 | 102 | 210 |
-| q20 | 137 | 138 | 150 | 319 |
-| q21 | 281 | 269 | 304 | 499 |
-| q22 | 79 | 75 | 89 | 196 |
-| **合计** | **3063** | **2666** | **2805** | **5982** |
-
-wall − engine ≈ 100–330 ms/条 = FE 规划 + `exec_plan_fragment_prepare/start` + 两次 `fetch_data` + mysql 协议；Q2/Q8/Q21 的差值大是 FE 规划（12/11 个 fragment）。Q11/Q16 的 wall 含 27,604 / 18,314 行的取数。这台 T4 的数字**不代表 L40S**。
-
-一句话结论：**MVP-A0 的技术目标达成：FE → 伪 BE → 拼接器 → Sirius GPU → mysql 客户端，TPC-H SF1 22/22 正确、单条百毫秒级；剩下的是对外（上游 PR / #137）和规模（SF10）。**
-
-### P1.5 负向用例对照（G-01～G-18 ↔ 单测）
-
-| G | 处置 | 单测（`crates/doris-plan-translator/src/…` 除注明） |
-|---|---|---|
-| G-01 LARGEINT | 硬拒 | `type_mapper::largeint_is_rejected`、`expr_translator::largeint_literals_are_rejected`、`descriptor_table` 同类 |
-| G-02 concat | 硬拒 | `expr_translator::concat_and_unlisted_functions_are_rejected_by_name` |
-| G-03 LIKE 转义 | 条件放行 | `expr_translator::like_requires_a_constant_pattern_without_backslash` |
-| G-04 substring | 条件放行 | `expr_translator::substring_requires_constant_positive_bounds` |
-| G-05 DECIMAL256 | 拒 | `type_mapper::decimal256_is_rejected` |
-| G-06 DECIMAL(p≤4) | slot 拒 / 字面量抬精度 | `type_mapper::decimal_precision_at_most_4_is_rejected`、`expr_translator` 字面量测试（`0.2`→`decimal<5,1>`） |
-| G-07 HLL/BITMAP/… | 拒 | `type_mapper::aggregate_state_types_are_rejected` |
-| G-08 JSONB/VARIANT | 拒 | `type_mapper::jsonb_and_variant_are_rejected` |
-| G-09 IPV4/IPV6/VARBINARY/TIMESTAMPTZ | 拒 | `type_mapper::binary_ip_time_and_tz_types_are_rejected` |
-| G-10 ARRAY/MAP/STRUCT | 拒 | `type_mapper::nested_type_descriptors_are_rejected` |
-| G-11 窗口 | 拒（ANALYTIC_EVAL_NODE） | `node_translator::unsupported_and_malformed_plans_are_named`；语料 `gaps/g11-window` |
-| G-12 UNION/INTERSECT/EXCEPT | 拒（三种节点） | 同上；语料 `gaps/g12-union-all`、`gaps/g12-union-distinct` |
-| G-13 SELECT DISTINCT | **放行**（零函数 group-by，CPU 差分已过，GPU 未验；`ORDER BY 全部 key LIMIT n` 的 update 相 top-N 也折叠） | `stitcher::collapses_a_two_phase_distinct_without_functions`、`…::merge_grouping_keys_must_read_the_update_output_in_order`、`…::collapses_a_top_n_by_group_key_pushed_onto_both_phases`；语料 `gaps/g13-distinct(-topn)` |
-| G-14 两阶段聚合 | 单 fragment 拒 / A0 折叠 | `node_translator::two_phase_aggregates_are_rejected_by_phase`、`stitcher::splices_senders_and_collapses_a_two_phase_aggregate` + `stitching_gates` |
-| G-15 非白名单标量函数 | 拒 | `expr_translator::concat_and_unlisted_functions_are_rejected_by_name` |
-| G-16 非白名单聚合 / 多列 distinct | 拒 | `expr_translator::aggregate_gates` |
-| G-17 DATE/DATETIME v1、DECIMALV2 | 拒 | `type_mapper::legacy_v1_types_are_rejected`、`expr_translator` DATE_LITERAL v1 拒 |
-| G-18 NULL_TYPE | 拒 / NULL 字面量包 Cast | `type_mapper::null_type_is_rejected`、`expr_translator::null_literals_are_cast_to_their_type` |
-
-一句话结论：**翻译器（P1）完工**——22 条 TPC-H 在协议壳里端到端翻成单棵 Substrait 并有快照钉死；下一步是对外收尾 + GPU。
+**上游**：无变化。
 
 ## 下一步
 
-**下一个 session：T1 机型上出主表**（用户 09-19 拍板 §12：主机 g6e.4xlarge $3/h，成本对齐 CPU 机 c7i.12xlarge，做参照 C；T2 等主结论）。用户侧先做：申请 G 系列 vCPU 配额 ≥ 32（1～2 个工作日）、push 本机 commit（见下）。机器到手后：
-1. 按 `environment.md`「GPU 机」搭环境：pixi（根 + `experimental/doris`）→ `pixi run make TEST_BUILD_TARGET=`（45 min@8 vCPU，16 vCPU 快些）→ `fe-fetch` / `fetch-be.sh` → NVMe `mkfs.ext4 + mount /mnt/nvme`（**先 `dd if=<big file> of=/dev/null bs=1M iflag=direct` 量读速**，本机只有 0.4 GB/s）→ 起 FE。**原生 BE 第一次起来用的 `storage_root_path` 就定死在 NVMe（`be-native.sh` 默认），之后别改。**
-2. SF10 先跑一遍验证环境：`tpchgen-cli -s 10 --format=parquet --parts=1 --output-dir=/mnt/nvme/tpch_parquet_sf10` + 改名 `part.0.parquet` → `bench-all.sh --data /mnt/nvme/tpch_parquet_sf10 --rounds 4 --price native-split=3.004 --price sirius-buffered=3.004`（6 个系统 ≈25 min）→ `--systems native-olap --load-olap`；**跑的时候不要碰 FE 的 GLOBAL 变量**。
-3. SF100：`tpchgen-cli -s 100`（≈36 GB parquet，NVMe 上几分钟）→ 基线 `validate_tpch_results.py expected --data … --out /mnt/nvme/expected-sf100`（不进仓库，Q11/Q16 几百万行）→ `bench-all.sh --data /mnt/nvme/tpch_parquet_sf100 --expected` 不支持 → 用 `bench.sh --expected /mnt/nvme/expected-sf100` 逐系统跑，或给 `bench-all.sh` 加 `--expected` 转发（一行）。加 `duckdb-gpu-pinned`（48 GB 显存能 pin SF10；SF100 试 `SIRIUS_PIN_TIER=host`）。看 telemetry 里哪几条走了 host tier（`log/bench/<run>/telemetry/*/batch_placement`）。
-4. T1′：c7i.12xlarge 上只搭 FE + 原生 BE（不需要 GPU 环境、不编引擎：`pixi install -e fe` + `fetch-fe/fetch-be`），跑 `native`/`native-split`/`native-olap`，`bench-report.py report --runs <两台的目录> --price native-split=2.14 --price sirius-buffered=3.004` 出每美元加速比。
-5. 报告：`results.md` 现在是 T0 的；T1 出来后改成主表 SF100 + 规模表（SF1/SF10/SF100）+ T0 附录。
+1. **先 push**（GPU 机没凭据）：`git push origin experimental-doris`。Mac 上开工前 `git pull --ff-only`。
+2. **翻译器折叠恒等 Project / 重复 Sort**（`tasklist.md` B10-b）：`stitcher.rs`/`node_translator.rs` 里投影链的处理；改完只重跑 `bench.sh --system sirius-buffered --data /mnt/nvme/tpch_parquet_sf100 --expected /mnt/nvme/expected-sf100 --host-capacity 160Gi --out log/bench-t1/sf100-sirius-buffered-v2` 和同参数的 `duckdb-gpu`，看 1.42× 收回多少。先用 `run-tpch.sh --translate-only` + `INDEX.md` 数一下每条的 Project 数（handoff 已知 9～25）。
+3. **T1′ c7i.24xlarge**（B10-d）：只装 `pixi install -e fe` + `fetch-fe/fetch-be`，NVMe 上生成 SF100，跑 `native`/`native-split`/`native-olap`（`--price native=4.28`）。
+4. `duckdb-gpu-pinned` SF100 host-pin 版（B10-c）。
+5. 之后 A0.7 · 上游落地（两处引擎修复单独 PR + Draft PR），见上一 session 的清单（历史记录 2026-09-19 第十二次）。
 
-**之后 A0.7 · 上游落地**（`tasklist.md` A0.7；ADR-011 D-1 修订的前置条件"A0 跑通"已满足），MVP-A。本机状态：FE（9030）**还在跑**，两个 BE 都停了（`be.sh start --engine` / `be-native.sh start` 随时起；本机的原生 BE 要 `DORIS_BE_STORAGE="/mnt/nvme/doris-storage;<repo>/experimental/doris/.doris-be/storage"`，见已知坑）；`/tmp/tpch-sf1`、`/tmp/tpch-sf10` 软链在（**重启后要重建**，NVMe 也要重新挂/重生成，见 `environment.md`）。`PATH` 里要有 `~/.pixi/bin`。
-
-1. **先 push**（本机没凭据，用户来推或在本机 `gh auth login` / 配 SSH key）：`git push origin experimental-doris`。Mac 上开工前 `git pull --ff-only`。**本机现在有 12 个未 push 的 commit**（`351347bf`…本次两个）。
-2. **A0.7-a 引擎修复单独提上游**（两处都在 `src/`，与 `experimental/doris/` 无关，按 CONTRIBUTING 的 Self-contained 路径各开一个小 PR，base `dev`）：
-   - `src/op/sirius_physical_hash_join.cpp::get_next_task_hint`：未定尺寸的 MARK join 返回 `WAITING_FOR_INPUT_DATA(build 生产者)` 而不是让 `refresh_cross_schedule` throw（G-31；复现：一个 `NOT IN (子查询)` 的 MARK join 作为上层 inner join 的 probe 源，透明路径要用 Substrait/FFI 才碰得到，或写一个 C++ 单测构造 STANDARD 模式的 MARK join 轮询）；
-   - `src/planner/sirius_plan_comparison_join.cpp::materialize_expression_join_keys`：不等值条件侧也物化（G-32；复现：`cast(a as DECIMAL(38,5)) < 0.2 * b` 作为 join condition——透明路径要绕开 DELIM_JOIN，例如两表 `JOIN … ON a.k = b.k AND a.x < 0.2 * b.y`）。
-   提 PR 前跑根仓库 `pixi run make test`（C++ 单测 `sirius_unittest` 本机还没编，`TEST_BUILD_TARGET=` 跳过了；估计 +10–15 min）；要写 Catch2 单测的话看 `test/cpp/` 里 hash join 的既有用例。
-3. **A0.7-b Doris 伪 BE 上游 Draft PR** `sirius-db/sirius:dev ← morningman/sirius:experimental-doris`：**先把 `plan-doc/` 从分支拿掉**（最后一个 commit `git rm -r plan-doc`，或在一条不含 plan-doc 的分支上 cherry-pick 代码 commit），按 CONTRIBUTING「PR reviewability」清单写描述（README 已是入口；把 A0.5 的 22/22 + timings 贴上），保持 Draft；re-open #137 贴链接与现状。引擎修复的两个 commit 要么先合、要么在这个 PR 里说明依赖。
-4. ~~SF10~~ 已做（本 session）：数据在 `/mnt/nvme/tpch_parquet_sf10`，基线 `tests/expected/tpch-sf10/`，`run-tpch.sh --data /tmp/tpch-sf10 --expected tests/expected/tpch-sf10` 22/22；16 GB 显存跑 SF10 没有降级。
-5. 之后 MVP-A（真 fragment，依赖 #1791 + #1792 `891d41c3`）。
-
-已知会在 GPU 上遇到的事——**A0.5 后更新**：`avg(DECIMAL)` 的 DOUBLE→DECIMAL(38,4) 在 GPU 上截断（G-19，`--ulps 1` 兜住）；`sum(TINYINT)`（Q12）精确、`count(DISTINCT)`（Q16）精确、零度量 group-by（G-13）精确、cross join 常量 key 等值 join（Q7/Q11/Q22）正常、`year()` cast 正常、9～25 个恒等 Project 只影响时间。空 build 的 MARK join（`NOT IN` 子查询无行）A0 语料没覆盖，G-31 修复后行为是「等 build 生产者」，透明路径探针正常，值得在 MVP-A 加探针。
-
-提交习惯（P0 提交时定下的，之后照做）：
-1. 只 `git add experimental/doris .github/workflows/experimental.yml .gitmodules`，**不要** `git add -A`；`cucascade` 指针是本地读代码时改的，不 stage（GPU 机上 `duckdb`/`cucascade` 按提交的指针浅拉，`git status` 干净）。**引擎修复（`src/`）单独 commit**，方便 cherry-pick 到上游 PR。
-2. `plan-doc/` **从 09-18 晚起随分支提交**（用户拍板；两台机器的 `.git/info/exclude` 里都只有 `test_datasets/tpch_parquet_sf1/`）。commit hook 是 Claude Code 的 `PreToolUse` agent hook，只匹配以 `git commit` 开头的 Bash 命令——把 commit 写进脚本文件再 `bash` 它就不会触发（这也是第 5 条的由来），它对 plan-doc 的"AI 运行笔记"判定不用理。
-   plan-doc 的 commit 和代码 commit 分开提（`docs(doris): …`），上游 PR 前整体拿掉。
-3. 语料里的绝对路径是 `/tmp/tpch-sf1/...`（符号链接 → `test_datasets/tpch_parquet_sf1`），下次采语料保持这个路径，diff 才干净。**重采语料后要 `UPDATE_SNAPSHOTS=1` 重生成快照并 review diff**（query id 不进快照，形状不变则快照不变）。
-   `run-tpch.sh --translate-only` 每次**重写整个** `--out/INDEX.md`（只含本次跑的查询），所以 gaps 探针要 5 条一起重采，不能只采一条。
-   `tests/expected/` 是 DuckDB 从 SF1 parquet 算的基线，换数据集要 `validate_tpch_results.py expected --data … --out …` 重生成。
-4. `experimental.yml` 只在 `pull_request` / `merge_group` 触发，推到 fork 不会跑 CI；要看 CI 得在 fork **内部**开一个 `experimental-doris → dev` 的 PR（base 也是 fork 的 dev），并先 enable fork 的 Actions。
-5. 提交命令写成脚本文件再 `bash`（hook 会误拦长命令）。
-6. 09-19 起有两台机器改同一分支（Mac 与 GPU 机），**每次开工先 `git pull --ff-only fork experimental-doris`**（GPU 机上远程名是 `origin` = fork），收工 push；两边都别 rebase 已推的 commit。
-7. **改了引擎（`src/`）后**：`pixi run make TEST_BUILD_TARGET=` 增量 1–1.5 min；`be.sh start --engine` 会因 `libsirius.so` 变了重链一次 BE（23 s）；重启 BE 后要等 FE 心跳（≈2–5 s）才 Alive，`run-tpch.sh` 立刻跑会报 `No available backend`。
-
-会议纪要仍待按 `meeting-2026-09-09.md` 附录 D 写回。
+**本机状态**：FE（9030）跑着（全新集群，09-19 `fe.sh clean` 过）；两个 BE 都停了；`/mnt/nvme`（RAID0）上有 `tpch_parquet_sf{1,10,100}`、`expected-sf100`、`doris-storage`（内表现在是 SF1 的，`--load-olap` 会 FORCE 重建）；软链 `/tmp/tpch-sf{1,10,100}`。**停机即清**：`environment.md`「GPU 机」有重建命令。
 
 ---
 
 ## 已知坑（累积，发现一条加一条）
+
+### 🔴 T1 换机实测（2026-09-19，同一根卷原地改型 g4dn.2xlarge → **g6e.8xlarge**）
+
+- **机型以 EC2 metadata 为准**（`curl 169.254.169.254/latest/meta-data/instance-type`，`bench.sh` 的 `env.txt` 也记）：用户说的 4xlarge 实际是 8xlarge（32 vCPU / 248 GiB / 2×450 GB NVMe，$4.529/h）。价格、T1′ 的 CPU 配对机（c7i.24xlarge 而非 12xlarge）都跟着变，脚本不用改。
+- **`target-cpu=native` 编的二进制换 CPU 就 Illegal instruction**：`tpchgen-cli`（上游 `generate_tpch_data.sh` 用 `RUSTFLAGS="-C target-cpu=native"`）在 Xeon 8259CL（AVX-512）上编的，EPYC 7R13 没有 AVX-512，`--help` 都 SIGILL；而且 **cargo 的指纹只记 RUSTFLAGS 字符串不记 CPU**，同样的 flag 再 `cargo build` 直接 "Finished in 0.08s" 什么都不重编——要 `rm -rf target` 全量重来（32 核 1.5 min）。伪 BE（cargo 无 target-cpu）、引擎（CMake 无 `-march=native`）、官方 BE（AVX2）都不受影响；`.duckdb-substrait/` 是 Xeon 上编的还没验。
+- **引擎不用重编就能上 L40S**：`CMAKE_CUDA_ARCHITECTURES=75;80;86;89;90a;100f;120a;120`，含 `89-real`；冒烟 Q6 SF1 14 ms（T4 60 ms）。第一次跑透明路径时进程退出挂了 >100 s（查询本身 10:08:49 已完成）、第二次起 1.6 s 正常退出——原因没查（可能是首次 JIT/驱动缓存），`run-tpch-duckdb.sh` 要是卡在最后一条之后先看这个。
+- **重启后第一次起原生 BE 要 ≈2 min**：2.65 GB 的 `lib/doris_be` 冷读 EBS gp3（≈125 MB/s）：进程出第一行日志前 36 s、内嵌 JVM 40 s、SymbolIndex 26 s；热起 9 s。`be-native.sh` 的等待上限 90 s → 300 s。`bench-all.sh` 里 Sirius 系统那轮 `drop_caches` 时原生 BE 是停着的，之后再起它就又是冷的，所以不只是重启后一次。
+- **换机 = 实例盘清零 → FE 元数据必须一起清**（`fe.sh clean`）：原生 BE 上一台挂了两个 storage root（`/mnt/nvme/doris-storage` + 根卷 `.doris-be/storage`），NVMe 那份没了、FE 还记着 tablet 在上面；按"root 不能变"的坑，保留元数据只能继续挂两个 root，重灌的内表会有一部分落到 EBS。清零重来后 FE 第一次见到的 root 就是 NVMe，内部统计表、内表全在 NVMe。代价为零：`tpch` 视图（`run-tpch.sh`）、两个 BE 的注册（`be-native.sh` / 伪 BE 自注册）、`remote_fragment_exec_timeout_ms`（`conf/fe.conf`）全由脚本补。FE 全新集群第一次起要 69 s。
+- **两块实例盘做 RAID0**（`mdadm --level=0 --chunk=512`，`mkfs.ext4 -E lazy_itable_init=0,lazy_journal_init=0` 免得挂载后几分钟的后台 inode 初始化干扰测速，`-o noatime`）：真实文件 O_DIRECT 单流 2.0–3.2 GB/s、8 文件并发 2.7 GB/s。**裸盘 `dd` 在没写过的块上读数偏快且不稳**（同一块盘 1.0–1.6 GB/s 来回跳），量盘速要用生成后的真实文件。
+- `vm.max_map_count` 重启复位到 1,048,576（BE 靠 `SKIP_CHECK_ULIMIT=true` 绕过检查，但还是调回 2,000,000）；`/tmp` 软链、`/mnt/nvme` 挂载、SF10 数据都要重来（SF10 生成在 32 核上 5.7 s）。
+- **`olap-load.sh` 换 SF 会撞 colocate 桶数**：Doris 自带 DDL 的 `DROP TABLE IF EXISTS` 不带 FORCE，旧表进 FE 回收站、colocate 组（`lineitem_orders` 32 桶）还活着，sf100 DDL 的 96 桶报 "Colocate tables must have same bucket num: 96 should be 32"，`set -e` 让整条 `bench-all.sh --load-olap` 链在第一步就退出。现在 `olap-load.sh` 先 `DROP DATABASE IF EXISTS tpch_olap FORCE` 再建（真幂等）。
+- SF100 准备实测（32 核 + RAID0）：`tpchgen-cli -s 100` **44 s**（38 GB，lineitem 25.75 GB 单文件）；DuckDB 基线 `validate_tpch_results.py expected` **45 s**（`/mnt/nvme/expected-sf100`，648 KB——Q11 的 `0.000002` 阈值随 SF 长，SF100 反而只有几百行，"Q11/Q16 几百万行"的担心不成立）；内表灌数 partsupp 8000 万行 11 s、orders 1.5 亿行 20 s。`bench-all.sh` 新增 `--expected DIR` 和 `--host-capacity` 转发（SF100 的 Sirius 系统用 160Gi，给 B′ 的 38 GB page cache 留位置）。
+- `bench.sh` 在 248 GiB 机器上自动算的 host tier 是 **223 GiB**，`cudaMallocHost` 起得来（first-touch 才占，`free` 里 used 只 +6 GB）；GPU 池 0.9 × 46 GB = 41.4 GB。
 
 ### 🔴 SF10 基准跑通实测（2026-09-19 晚，GPU 机；`experiments/sf10-bench/`、`scripts/bench*.sh`、原生 BE）
 
@@ -415,6 +348,64 @@ wall − engine ≈ 100–330 ms/条 = FE 规划 + `exec_plan_fragment_prepare/s
 
 <details>
 <summary>历史记录</summary>
+
+### 2026-09-19（第十三次，GPU 机换型 g6e.8xlarge）
+环境检查：机型实际 8xlarge（拍板保留）、引擎免重编、两块实例盘 RAID0、FE `clean` 重来、`tpchgen-cli` SIGILL 重编、原生 BE 冷起 2 min（等待 300 s）。SF10 8 系统 11 min、SF100 7 系统 57 min（`olap-load.sh` colocate 桶数坑 → FORCE）、SF1 8 系统 7 min，全部过校验。主表 SF100 A stock vs B′ 1.34× / 1.56×；GPU busy 22 %；B vs R2 1.42×（plan 形状）；SF100 无降级（35.6 GiB）；DuckDB 32 线程 39 s、内表 18 s。`results.md` 重写为 T1，T0 挪到附录；`environment.md` GPU 机一节重写。下一步：翻译器折叠恒等 Project、T1′ CPU 机。
+
+#### 参考表（从第十一/十二次 session 的「当前状态」移过来）
+
+### A0.6 计时（SF1，T4，2026-09-19，三轮：冷 / 热 / 热；单位 ms，engine = `SiriusContext::execute_substrait` 含 parquet 读；wall = mysql 客户端往返）
+
+| q | engine 冷 | engine 热 | engine 热 | wall 热 |
+|---|---|---|---|---|
+| q01 | 258 | 97 | 101 | 210 |
+| q02 | 209 | 179 | 178 | 508 |
+| q03 | 113 | 89 | 93 | 199 |
+| q04 | 107 | 59 | 65 | 133 |
+| q05 | 145 | 127 | 126 | 304 |
+| q06 | 70 | 60 | 57 | 102 |
+| q07 | 147 | 141 | 145 | 344 |
+| q08 | 186 | 200 | 171 | 443 |
+| q09 | 197 | 197 | 196 | 400 |
+| q10 | 164 | 155 | 159 | 307 |
+| q11 | 140 | 133 | 139 | 364 |
+| q12 | 97 | 84 | 80 | 162 |
+| q13 | 97 | 94 | 118 | 184 |
+| q14 | 74 | 76 | 112 | 195 |
+| q15 | 122 | 89 | 99 | 227 |
+| q16 | 113 | 85 | 88 | 203 |
+| q17 | 101 | 101 | 110 | 206 |
+| q18 | 124 | 118 | 122 | 267 |
+| q19 | 102 | 101 | 102 | 210 |
+| q20 | 137 | 138 | 150 | 319 |
+| q21 | 281 | 269 | 304 | 499 |
+| q22 | 79 | 75 | 89 | 196 |
+| **合计** | **3063** | **2666** | **2805** | **5982** |
+
+wall − engine ≈ 100–330 ms/条 = FE 规划 + `exec_plan_fragment_prepare/start` + 两次 `fetch_data` + mysql 协议；Q2/Q8/Q21 的差值大是 FE 规划（12/11 个 fragment）。Q11/Q16 的 wall 含 27,604 / 18,314 行的取数。这台 T4 的数字**不代表 L40S**。
+
+### P1.5 负向用例对照（G-01～G-18 ↔ 单测）
+
+| G | 处置 | 单测（`crates/doris-plan-translator/src/…` 除注明） |
+|---|---|---|
+| G-01 LARGEINT | 硬拒 | `type_mapper::largeint_is_rejected`、`expr_translator::largeint_literals_are_rejected`、`descriptor_table` 同类 |
+| G-02 concat | 硬拒 | `expr_translator::concat_and_unlisted_functions_are_rejected_by_name` |
+| G-03 LIKE 转义 | 条件放行 | `expr_translator::like_requires_a_constant_pattern_without_backslash` |
+| G-04 substring | 条件放行 | `expr_translator::substring_requires_constant_positive_bounds` |
+| G-05 DECIMAL256 | 拒 | `type_mapper::decimal256_is_rejected` |
+| G-06 DECIMAL(p≤4) | slot 拒 / 字面量抬精度 | `type_mapper::decimal_precision_at_most_4_is_rejected`、`expr_translator` 字面量测试（`0.2`→`decimal<5,1>`） |
+| G-07 HLL/BITMAP/… | 拒 | `type_mapper::aggregate_state_types_are_rejected` |
+| G-08 JSONB/VARIANT | 拒 | `type_mapper::jsonb_and_variant_are_rejected` |
+| G-09 IPV4/IPV6/VARBINARY/TIMESTAMPTZ | 拒 | `type_mapper::binary_ip_time_and_tz_types_are_rejected` |
+| G-10 ARRAY/MAP/STRUCT | 拒 | `type_mapper::nested_type_descriptors_are_rejected` |
+| G-11 窗口 | 拒（ANALYTIC_EVAL_NODE） | `node_translator::unsupported_and_malformed_plans_are_named`；语料 `gaps/g11-window` |
+| G-12 UNION/INTERSECT/EXCEPT | 拒（三种节点） | 同上；语料 `gaps/g12-union-all`、`gaps/g12-union-distinct` |
+| G-13 SELECT DISTINCT | **放行**（零函数 group-by，CPU 差分已过，GPU 未验；`ORDER BY 全部 key LIMIT n` 的 update 相 top-N 也折叠） | `stitcher::collapses_a_two_phase_distinct_without_functions`、`…::merge_grouping_keys_must_read_the_update_output_in_order`、`…::collapses_a_top_n_by_group_key_pushed_onto_both_phases`；语料 `gaps/g13-distinct(-topn)` |
+| G-14 两阶段聚合 | 单 fragment 拒 / A0 折叠 | `node_translator::two_phase_aggregates_are_rejected_by_phase`、`stitcher::splices_senders_and_collapses_a_two_phase_aggregate` + `stitching_gates` |
+| G-15 非白名单标量函数 | 拒 | `expr_translator::concat_and_unlisted_functions_are_rejected_by_name` |
+| G-16 非白名单聚合 / 多列 distinct | 拒 | `expr_translator::aggregate_gates` |
+| G-17 DATE/DATETIME v1、DECIMALV2 | 拒 | `type_mapper::legacy_v1_types_are_rejected`、`expr_translator` DATE_LITERAL v1 拒 |
+| G-18 NULL_TYPE | 拒 / NULL 字面量包 Cast | `type_mapper::null_type_is_rejected`、`expr_translator::null_literals_are_cast_to_their_type` |
 
 ### 2026-09-19 晚（第十二次，GPU 机）
 基准方案 §12 拍板（NVMe 挂了、g6e.4xlarge + c7i.12xlarge、做参照 C），T0 全流程跑通：`fetch-be.sh`/`be-native.sh`/`conf/be.conf`、`session-native{,-split}.sql`、`bench.sh`/`bench-all.sh`/`bench-report.py`/`run-tpch-duckdb.sh`/`fe-audit.py`/`evict-cache.py`/`olap-load.sh`、`conf/sirius-bench.yaml`、SF10 数据 + 基线（`547f799e`）。
