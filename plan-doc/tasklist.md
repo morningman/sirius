@@ -100,8 +100,8 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
 - [x] B5～B8 T0 上 SF10 全部系统 4 轮：A `native`、A-split `native-split`、B `sirius`、B′ `sirius-buffered`、R1 `duckdb`、R2 `duckdb-gpu`、C `native-olap` ← **2026-09-19** → 产出：`log/bench/sf10-*/`（本机，不进仓库）
 - [x] B9 报告：`bench-report.py report` → `experiments/sf10-bench/results.md`（T0 数字，标注 T4 下限）← **2026-09-19**
 - [x] B10 **T1**：机器实际到手 **g6e.8xlarge**（用户说 4xlarge，metadata 是 8xlarge，拍板保留；$4.529/h）。同一根卷原地改型，引擎不用重编（`CUDAARCHS` 含 89）；两块实例盘 RAID0、`fe.sh clean` 重来、`tpchgen-cli` 重编；SF10 全套 8 系统 11 min、**SF100 7 系统 57 min、SF1 8 系统**，每轮 22 条全过校验 ← **2026-09-19** → 产出：`log/bench-t1/{sf1,sf10,sf100}-*/`（GPU 机，不进仓库）、`log/bench-t1/*-results.md`、`results.md` 重写为 T1；脚本：`bench-all.sh --expected/--host-capacity`、`olap-load.sh` FORCE、`be-native.sh` 300 s
-  - 主表 SF100（A stock vs B′）：**几何平均 1.34×、总时间 1.56×**（98.6 s vs 154.8 s）；SF10（对 split）1.09× / 1.23×；GPU busy 中位数 22 %；GPU 池高水位 35.6 GiB 无降级；DuckDB 32 线程 39.0 s；Doris 内表 18.0 s；**B vs R2 = 1.42×（plan 形状代价，翻译器可修）**
-- [ ] B10-b **翻译器折叠恒等 Project / 重复 Sort**（`results.md` §2.4）：改完只重跑 SF100 的 `sirius-buffered` + `duckdb-gpu` 看 1.42× 收回多少
+  - 主表 SF100（A stock vs B′，引擎 `75606ff5` 修复后）：**几何平均 3.01×、总时间 3.80×**（40.6 s vs 154.4 s，22 条全赢）；SF10（对 split）1.77× / 2.13×；SF1 1.63× / 1.70×；GPU busy 中位数 46 %；GPU 池高水位 35.6 GiB 无降级；DuckDB 32 线程 38.9 s（≈ B′）；Doris 内表 18.0 s
+- [x] B10-b **伪 BE 引擎时间一半在 Substrait 降级**（原怀疑恒等 Project，不成立）：telemetry 查询窗口 vs `engine_ms` + `execute_substrait` 分段计时定位；根因 DuckDB 消费端逐层重绑定 + parquet footer 重解析（SF100 lineitem 5232 row group）；修法 FFI 路径开 DB 级 `parquet_metadata_cache` ← **2026-09-19** → 产出：engine commit `75606ff5`（`src/sirius_ffi.cpp`，含 FFI 日志 sink + 三段计时），三个规模 Sirius 系统重跑（`log/bench-t1/*-sirius*-v2`）；**待开上游 PR**
 - [ ] B10-c `duckdb-gpu-pinned` 的 SF100 版本（`SIRIUS_PIN_TIER=host`，bench.sh 加个 `--pin-tier`）
 - [ ] B10-d **T1′**：c7i.24xlarge（配 8xlarge，$4.28/h）只装 `pixi install -e fe` + `fetch-fe/fetch-be`，跑 `native`/`native-split`/`native-olap` SF100，`bench-report.py report --runs <两台> --price native=4.28 --price sirius-buffered=4.529`
 - [ ] B11 T2 可选加测（p5.4xlarge / g7e.2xlarge 只跑 Sirius 侧）——等 T1 主结论后由用户定（§12 Q4）

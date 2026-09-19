@@ -7,34 +7,42 @@
 ## 当前状态
 
 **日期**：2026-09-19（第十三次 session，GPU 机换型后的第一次）
-**阶段**：**轨 1 · Doris vs Doris+Sirius 基准 · T1 主表已出**——机器原地改型成 **`g6e.8xlarge`**（L40S 48 GB / 32 vCPU / 248 GiB / 2×450 GB NVMe RAID0，$4.529/h；用户说的是 4xlarge，metadata 是 8xlarge，拍板保留），SF100 / SF10 / SF1 三个规模全部系统跑完且每轮 22 条过校验，结果与解读在 **`experiments/sf10-bench/results.md`**（T1 正文，T0 附录）。A0.7 上游落地仍往后排。仓库 `/home/yy2/gpu/sirius`（`origin` = fork，分支 `experimental-doris`）。
-**代码**：本 session 只改了跑批脚本（`scripts/bench-all.sh` 加 `--expected`/`--host-capacity` 转发、`scripts/olap-load.sh` 建库前 `DROP DATABASE FORCE`、`scripts/be-native.sh` 起 BE 等 300 s）；**翻译器 / 伪 BE / 引擎没动**。docs：`environment.md`「GPU 机」重写、`handoff.md` 加「T1 换机实测」坑、`plan.md` §2 机型行、`tasklist.md` B10、`results.md` 重写。commit 见 git log（代码 / docs 分开）。
+**阶段**：**轨 1 · Doris vs Doris+Sirius 基准 · T1 主表已出，且修掉了伪 BE 最大的性能瓶颈**——机器原地改型成 **`g6e.8xlarge`**（L40S 48 GB / 32 vCPU / 248 GiB / 2×450 GB NVMe RAID0，$4.529/h；用户说的是 4xlarge，metadata 是 8xlarge，拍板保留），SF100 / SF10 / SF1 三个规模全部系统跑完且每轮 22 条过校验，结果与解读在 **`experiments/sf10-bench/results.md`**（T1 正文，T0 附录）。A0.7 上游落地仍往后排。仓库 `/home/yy2/gpu/sirius`（`origin` = fork，分支 `experimental-doris`）。
+**代码**：**引擎 `src/sirius_ffi.cpp`（commit `75606ff5`，单独提交，可上游）**：内嵌 DuckDB 开 DB 级 `parquet_metadata_cache`（Substrait 降级从每条 1～10 s 降到 55～220 ms）、FFI 路径认 `SIRIUS_LOG_*`、每条查询打 lower/plan/execute 三段耗时。跑批脚本：`bench-all.sh --expected/--host-capacity`、`olap-load.sh` 建库前 `DROP DATABASE FORCE`、`be-native.sh` 等 300 s、`be.sh stop` 等显存释放。**翻译器 / 伪 BE Rust 侧没动。** docs：`environment.md`「GPU 机」重写、`handoff.md` 两块新坑、`plan.md` §2、`tasklist.md` B10、`results.md` 重写。
 
-T1 热跑 22 条合计（s）：
+T1 热跑 22 条合计（s；Sirius 两列是引擎修复后的 `-v2` 数字）：
 
-| SF | A Doris 外表 | C Doris 内表 | B O_DIRECT | **B′ page cache** | R1 DuckDB 32 线程 | R2 透明路径 | R2-pinned | **A/B′** |
+| SF | A Doris 外表 | C Doris 内表 | B O_DIRECT | **B′ page cache**（引擎） | R1 DuckDB 32 线程 | R2 透明路径 | R2-pinned | **A/B′** |
 |---|---|---|---|---|---|---|---|---|
-| SF100 | **154.8**（stock；split 205.9） | 18.0 | 141.7 | **98.6**（引擎 95.6） | 39.0 | 94.7 | — | **几何 1.34× · 总 1.56×** |
-| SF10 | **15.0**（split；stock 28.5） | 2.9 | 12.4 | **12.2**（引擎 10.0） | 4.1 | 7.9 | 2.0 | 1.09× · 1.23× |
-| SF1 | **5.23**（split；stock 8.07） | 1.76 | 3.12 | **3.25**（引擎 1.25） | 1.25 | 1.13 | 0.62 | 1.53× · 1.59× |
+| SF100 | **154.4**（stock；split 205.4） | 18.0 | 91.7 | **40.6**（37.5） | 38.9 | 94.6（page cache 46.5） | — | **几何 3.01× · 总 3.80×** |
+| SF10 | **15.0**（split；stock 28.4） | 2.9 | 7.2 | **7.1**（4.9） | 4.1 | 7.9 | 2.0 | 1.77× · 2.13× |
+| SF1 | **5.2**（split；stock 8.0） | 1.8 | 3.1 | **3.1**（1.1） | 1.2 | 1.1 | 0.6 | 1.63× · 1.70× |
 
-五条要记住的结论（细节 `results.md` §2）：(1) 主表 1.34×/1.56×，赢在大扫描+大 join（Q3 5.2×、Q18 4.2×），输在 lineitem 窄扫描（Q21/Q14 0.63×）；T0 的 2.03× 是 8 核 Doris 的成绩。(2) **GPU busy 中位数 22 %**，SF10 pinned 2.0 s vs 引擎 10 s——瓶颈是 parquet 解码 + 搬运，不是算力。(3) **伪 BE 的 plan 比 DuckDB 自己规划的慢 1.42×（B vs R2，SF100 热，22 条全慢）**，怀疑 9～25 个恒等 Project + 重复 Sort，翻译器可修。(4) SF100 装得下 L40S：GPU 池高水位 35.6 GiB，无 host/disk 降级。(5) DuckDB 32 线程 39 s、Doris 内表 18 s 都比 B′ 快——诚实写进报告。
+要记住的结论（细节 `results.md` §2）：(1) 主表 SF100 **3.01× / 3.80×，22 条全赢**（Q18 13.8×、Q3 11.1×；最低 Q14 1.36×）；规模越大越好（SF1 1.63× → SF100 3.01×），T0 的 2.03× 作废。(2) **修复前伪 BE 一半引擎时间在 Substrait 降级**（消费端每层 Relation 重绑定、parquet footer 重解析；SF100 lineitem 5232 个 row group），修后 B′ 98.6 → 40.6 s，与 32 线程 DuckDB 打平；伪 BE 的 plan 反而比 DuckDB 自己规划的略好（0.84×）。(3) GPU busy 中位数 46 %（修复前 22 %），pinned 表常驻显存的上限还有 2.4×——剩下是 parquet 解码 + 搬运。(4) SF100 装得下 L40S：GPU 池高水位 35.6 GiB，无 host/disk 降级。(5) Doris 内表 18 s 仍比 B′ 快 2.3×，如实写。
 
-**上游**：无变化。
+**上游**：无变化（引擎修复 `75606ff5` 待开 PR）。
 
 ## 下一步
 
 1. **先 push**（GPU 机没凭据）：`git push origin experimental-doris`。Mac 上开工前 `git pull --ff-only`。
-2. **翻译器折叠恒等 Project / 重复 Sort**（`tasklist.md` B10-b）：`stitcher.rs`/`node_translator.rs` 里投影链的处理；改完只重跑 `bench.sh --system sirius-buffered --data /mnt/nvme/tpch_parquet_sf100 --expected /mnt/nvme/expected-sf100 --host-capacity 160Gi --out log/bench-t1/sf100-sirius-buffered-v2` 和同参数的 `duckdb-gpu`，看 1.42× 收回多少。先用 `run-tpch.sh --translate-only` + `INDEX.md` 数一下每条的 Project 数（handoff 已知 9～25）。
-3. **T1′ c7i.24xlarge**（B10-d）：只装 `pixi install -e fe` + `fetch-fe/fetch-be`，NVMe 上生成 SF100，跑 `native`/`native-split`/`native-olap`（`--price native=4.28`）。
-4. `duckdb-gpu-pinned` SF100 host-pin 版（B10-c）。
-5. 之后 A0.7 · 上游落地（两处引擎修复单独 PR + Draft PR），见上一 session 的清单（历史记录 2026-09-19 第十二次）。
+2. **T1′ c7i.24xlarge**（`tasklist.md` B10-d）：只装 `pixi install -e fe` + `fetch-fe/fetch-be`，NVMe 上生成 SF100（`tpchgen-cli` 要在那台机器上重编，见已知坑），跑 `native`/`native-split`/`native-olap`（`--price native=4.28`），`bench-report.py report --runs <两台>` 出每美元加速比。
+3. **引擎修复上游**：`75606ff5`（`src/sirius_ffi.cpp`）+ 上一 session 的 G-31/G-32 两处，按 CONTRIBUTING Self-contained 路径各开小 PR（base `dev`）；提前跑根仓库 `pixi run make test`。
+4. `duckdb-gpu-pinned` SF100 host-pin 版（B10-c）、`enable_prefetch_cache` 对 B′ 的效果；Q13/Q22 的 FE plan 比 DuckDB 慢 1.2～1.3×，看 join 顺序。
+5. 之后 A0.7 · 上游落地（Draft PR + re-open #137），见历史记录 2026-09-19 第十二次的清单。
 
-**本机状态**：FE（9030）跑着（全新集群，09-19 `fe.sh clean` 过）；两个 BE 都停了；`/mnt/nvme`（RAID0）上有 `tpch_parquet_sf{1,10,100}`、`expected-sf100`、`doris-storage`（内表现在是 SF1 的，`--load-olap` 会 FORCE 重建）；软链 `/tmp/tpch-sf{1,10,100}`。**停机即清**：`environment.md`「GPU 机」有重建命令。
+**本机状态**：FE（9030）跑着（全新集群，09-19 `fe.sh clean` 过）；两个 BE 都停了；`/mnt/nvme`（RAID0）上有 `tpch_parquet_sf{1,10,100}`、`expected-sf100`、`doris-storage`（内表现在是 SF1 的，`--load-olap` 会 FORCE 重建）；软链 `/tmp/tpch-sf{1,10,100}`。**停机即清**：`environment.md`「GPU 机」有重建命令。`log/bench-t1/` 里 `*-sirius*`（修复前）和 `*-sirius*-v2`（修复后）都在。
 
 ---
 
 ## 已知坑（累积，发现一条加一条）
+
+### 🔴 伪 BE 引擎时间一半花在 Substrait 降级上（2026-09-19，SF100 定位；引擎修复 `75606ff5`）
+
+- **现象**：SF100 热跑 B′ 引擎 95.6 s，而 Quent telemetry 里的查询窗口（Executing→Exit）合计只有 36.0 s，且和透明路径走 page cache 的窗口（34.5 s）几乎一样；59 s 在窗口之外。给 `execute_substrait` 加三段计时后：**`lower_substrait`（Substrait → Relation → 绑定 → 优化）Q6 1.3 s、Q1 1.7 s、Q18 4.8 s、Q21 9.9 s**，物理规划 13–45 ms。CPU 版 DuckDB 1.5.5 + substrait 扩展上 `EXPLAIN from_substrait(plan)` 复现同样的数字（SQL 版 EXPLAIN 只要 0.2–0.5 s），所以是 DuckDB 消费端的问题，与 GPU 无关。
+- **原因**：消费端用 Relation API 建树，DuckDB 的 Relation 每建一层（Project/Filter/Aggregate…）都重新绑定整棵子树，parquet 叶子每绑一次就重新解析 footer + 重算列统计（`perf` 热点：thrift `ColumnMetaData::read`/`Statistics::read`、`TransformColumnStatistics`）；SF100 lineitem 单文件 **5232 个 row group**（tpchgen 的 row group 很小），一次绑定 ≈0.5 s，每多一层 +110 ms。SF1/SF10 上 footer 小，看不出来（T0 的"伪 BE 相对透明路径 0.99×"就是这么来的）。
+- **修法**：`sirius_ffi.cpp` bring-up 时给内嵌 DuckDB 开 **DB 级** `parquet_metadata_cache`（`DBConfig::SetOptionByName`）。会话级 `SET parquet_metadata_cache=true` 对消费端的绑定上下文**不可见**（实测没用），`SET GLOBAL` 才行。修后 lowering 55–220 ms，Q21 热 14.6 s → 4.8 s。
+- **教训**：`engine_ms` 是 `execute_substrait` 的总时长，和引擎自己的查询窗口不是一回事；两者差得多就先看 lowering。telemetry 的 `query/*.ndjson`（Executing→Exit）+ `operator/*.ndjson`（pipeline 声明 = 物理 plan 形状）不用日志 sink 也能对两条路径做逐条对比，脚本在 session 13 的 scratchpad（`telemetry-plans.py`，思路：按时间窗把 plan_id 归到 query）。
+- 顺带核实：**物理 plan 形状两条路径几乎一样**（Q6/Q1/Q18 pipeline 数相同；Q21 伪 BE 34 条 pipeline vs 透明路径 52 条——FE 的 plan 没有 DELIM_JOIN，反而更简单），"9～25 个恒等 Project 拖慢引擎"的猜测**不成立**——它们在 DuckDB 优化后基本消失了（CPU EXPLAIN 里 Q6 两条路径完全一致）。剩余的窗口内差异只有 Q21（1.5×）、Q22（1.56×）、Q13（1.42×），Q9 反而 FE 的 plan 快（0.69×）。
 
 ### 🔴 T1 换机实测（2026-09-19，同一根卷原地改型 g4dn.2xlarge → **g6e.8xlarge**）
 
@@ -66,7 +74,7 @@ T1 热跑 22 条合计（s）：
 ### 🔴 A0.5/A0.6 GPU 差分实测（2026-09-19，GPU 机；`run-tpch.sh` 执行模式、引擎两处修复）
 
 - **引擎的异常会杀掉 BE 进程**：task creator / executor 线程里抛出的 `std::runtime_error` 没有人接（不经过 cxx 边界）→ `std::terminate`，FE 看到 `UNAVAILABLE: io exception`，后面的查询全部 `No available backend`。Q16 就是这么死的（G-31）。**BE 没有守护/自动重启**，`run-tpch.sh` 也不会重启它——一条查询把引擎搞崩，本轮剩下的全失败；出现成片 `UNAVAILABLE` 先看 `log/be.log` 尾部有没有 `terminate called`。
-- **FFI 路径（`sirius_ffi.cpp` 的 `Context`）不装日志 sink**：`SIRIUS_LOG_LEVEL/BACKEND/DIR` 只在透明路径的 `SiriusContextExtensionCallback` 里读，BE 进程里引擎日志是 noop——**看不到任何 Sirius 内部日志**。要看 plan / join 模式 / 管线，用透明路径复现：`SIRIUS_CONFIG_FILE=… SIRIUS_LOG_LEVEL=debug SIRIUS_LOG_DIR=… build/release/duckdb`（写 `sirius_<date>.log`，含 Query Plan DAG）。BE 跑着时 GPU 被占 13.5 GB，shell 要另配小池子：`gpu: { usage_limit_bytes: 1Gi }, host: { capacity_bytes: 2Gi }`（SF1 22 条都够）或先 `be.sh stop`。
+- **FFI 路径的日志 sink**（09-19 `75606ff5` 起）：`sirius_ffi.cpp` bring-up 时也读 `SIRIUS_LOG_LEVEL/BACKEND/DIR`（之前只有透明路径的 `SiriusContextExtensionCallback` 读，BE 进程里引擎日志是 noop）。`SIRIUS_LOG_LEVEL=info SIRIUS_LOG_BACKEND=spdlog SIRIUS_LOG_DIR=… pixi run bash scripts/be.sh start --engine` 就有 `sirius_<date>.log`（含 Query Plan DAG、`[gpu_pool]` 高水位、每条查询的 `[sirius_ffi] execute_substrait: lower / plan / execute` 三段耗时）。`bench.sh` 不传这些变量，要看就 export 了再跑。另一种复现方式仍是透明路径：`SIRIUS_CONFIG_FILE=… SIRIUS_LOG_LEVEL=debug SIRIUS_LOG_DIR=… build/release/duckdb`（写 `sirius_<date>.log`，含 Query Plan DAG）。BE 跑着时 GPU 被占 13.5 GB，shell 要另配小池子：`gpu: { usage_limit_bytes: 1Gi }, host: { capacity_bytes: 2Gi }`（SF1 22 条都够）或先 `be.sh stop`。
 - **透明路径和 Substrait 路径的 plan 形状不同，不能拿前者的通过推断后者**：DuckDB 对 SQL 的关联子查询走 DELIM_JOIN（不等值比较留在 join 上方的 FILTER）、`NOT IN` 的 MARK join 被优化器放到最顶层；我们的 Substrait plan 是 FE 的 join 顺序 + 显式 inner join，DuckDB 优化器只做 filter pushdown / 收 join condition。Sirius 上游的 TPC-H 测试全绿不等于 FFI 路径能过——G-31/G-32 都是只有 FFI 路径才碰得到的。
 - **DuckDB 优化器会把「左引用 vs 右表达式」的任何比较收成 join condition**（`PushdownInnerJoin` → cross product → `ExtractJoinConditions`），翻译器发 `Filter(Join)` 也没用；所以不等值 join 条件里的表达式问题只能在引擎 planner 里解（G-32 的修法），或在翻译器里先把两侧表达式各自投影成列（等价、但引擎修更通用）。
 - **cuDF AST 的能力面**（`gpu_expression_translator.cpp`）：cast 只到 INT64/UINT64/FLOAT64；带 DECIMAL 的函数调用（算术）一律拒绝（"propagates decimal types"，等 cudf#21996）；NULL 常量不能进 AST；DECIMAL 列之间的比较可以（同 scale）。任何走 AST 的谓词（mixed join、动态过滤）都受此限制。
@@ -350,7 +358,7 @@ T1 热跑 22 条合计（s）：
 <summary>历史记录</summary>
 
 ### 2026-09-19（第十三次，GPU 机换型 g6e.8xlarge）
-环境检查：机型实际 8xlarge（拍板保留）、引擎免重编、两块实例盘 RAID0、FE `clean` 重来、`tpchgen-cli` SIGILL 重编、原生 BE 冷起 2 min（等待 300 s）。SF10 8 系统 11 min、SF100 7 系统 57 min（`olap-load.sh` colocate 桶数坑 → FORCE）、SF1 8 系统 7 min，全部过校验。主表 SF100 A stock vs B′ 1.34× / 1.56×；GPU busy 22 %；B vs R2 1.42×（plan 形状）；SF100 无降级（35.6 GiB）；DuckDB 32 线程 39 s、内表 18 s。`results.md` 重写为 T1，T0 挪到附录；`environment.md` GPU 机一节重写。下一步：翻译器折叠恒等 Project、T1′ CPU 机。
+环境检查：机型实际 8xlarge（拍板保留）、引擎免重编、两块实例盘 RAID0、FE `clean` 重来、`tpchgen-cli` SIGILL 重编、原生 BE 冷起 2 min（等待 300 s）。SF10 8 系统 11 min、SF100 7 系统 57 min（`olap-load.sh` colocate 桶数坑 → FORCE）、SF1 8 系统 7 min，全部过校验。主表 SF100 A stock vs B′ 1.34× / 1.56×；GPU busy 22 %；B vs R2 1.42×（plan 形状）；SF100 无降级（35.6 GiB）；DuckDB 32 线程 39 s、内表 18 s。`results.md` 重写为 T1，T0 挪到附录；`environment.md` GPU 机一节重写。随后追查 B vs R2 的 1.42×：telemetry 查询窗口 + `execute_substrait` 分段计时定位到 **Substrait 降级占引擎时间一半**（消费端逐层重绑定、parquet footer 重解析），引擎 `75606ff5` 开 DB 级 `parquet_metadata_cache`（+ FFI 认 `SIRIUS_LOG_*`），SF100 B′ 98.6 → 40.6 s（3.01× / 3.80×），三个规模的 Sirius 系统重跑、报告重出。下一步：T1′ CPU 机、引擎修复上游。
 
 #### 参考表（从第十一/十二次 session 的「当前状态」移过来）
 
