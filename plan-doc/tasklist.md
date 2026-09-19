@@ -3,7 +3,7 @@
 进度约定：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成。完成时在条目后补一行 `→ 产出：<路径/commit>`。
 
 **当前阶段（2026-09-19）：两条轨。**
-- **轨 1 · 伪 BE（ADR-011，验证/benchmark 载体）**：P0 脚手架完成（2026-09-18）；P1 翻译器全部完成（2026-09-18）；MVP-A0 的 Mac 侧准备全部完成（2026-09-18 晚）；GPU 机（AWS `g4dn.2xlarge`）A0.4-0 Linux x64 三层验证通过（2026-09-19）；**A0.4 引擎编成、引擎路径 BE 在 GPU 上跑通第一条查询（2026-09-19）** → 下一步 **A0.5 22/22 GPU 差分**。
+- **轨 1 · 伪 BE（ADR-011，验证/benchmark 载体）**：P0 脚手架完成（2026-09-18）；P1 翻译器全部完成（2026-09-18）；MVP-A0 的 Mac 侧准备全部完成（2026-09-18 晚）；GPU 机（AWS `g4dn.2xlarge`）A0.4-0 Linux x64 三层验证通过（2026-09-19）；A0.4 引擎编成、引擎路径 BE 跑通（2026-09-19）；**A0.5 TPC-H 22/22 在 GPU 上与 DuckDB 基线一致 + A0.6 每条查询引擎时间已记录（2026-09-19，修了两处引擎问题 G-31/G-32）** → 下一步 **A0.7 上游落地**（含把引擎修复单独提 PR），之后 SF10 / MVP-A。
   **上游 PR / re-open #137 推迟到 A0 跑通后**（用户 09-18 拍板，ADR-011 D-1 修订）——此前全部在 fork `morningman/sirius` 的 `experimental-doris` 上迭代。
 - **轨 2 · 进程内（ADR-010，产品路径）**：P0 可嵌入性调研已完成（2026-09-01，`embeddability-study.md`）；`push_arrow` 提案在 #1590 等回复；MVP-0 未开工、搁置。
   轨 2 的 M0.1/M0.2（fragment dump + 语料）已由轨 1 的 P0 实现（语料两轨共用：`experimental/doris/tests/fixtures/tpch/`）。
@@ -79,9 +79,14 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
       BE：`experimental/doris` 的 default 环境（含 `engine` 特性）`pixi install` 11 s（5.2 GB，与根 env 共享包缓存）；`cargo build --release -p sirius-doris-be` **3 min**（直接跑 cargo，绕开 `be-build` 任务对 `engine-build` 的依赖——那会把 C++ 单测 target 也编一遍）；
       新文件 `conf/sirius.yaml`（`num_gpus: 1`、GPU 90%、**host `capacity_bytes: 12Gi`**、disk 100Gi → `log/sirius-spill`、Quent 遥测 → `log/telemetry`）；`scripts/be.sh start --engine` 补齐：`LD_LIBRARY_PATH`（build 树 + pixi env `lib/`）、缺省 `--sirius-config conf/sirius.yaml`、预建 spill/telemetry 目录；启动命令 **`pixi run bash scripts/be.sh start --engine`**（default 环境）。
       **验收**：引擎 bring-up ≈4 s（显存预留 13.5 GB，BE RSS 1.3 GB），`SHOW BACKENDS` Alive；`run-tpch.sh --data /tmp/tpch-sf1 --queries 6` → **Q6 在 GPU 上 221 ms 返回，`revenue = 123141078.2283` 与 DuckDB 基线一致（validate OK）**，`log/telemetry/<query>/` 有 Quent 输出
-- [ ] A0.5 22/22 与 DuckDB 基线逐行一致（`run-tpch.sh --data …` 自动校验；SF1 用仓库里的 `tests/expected/tpch-sf1`，SF10 先 `validate_tpch_results.py expected --data … --out …` 生成；容差默认 1e-9 相对 + 半 ulp，GPU 上 FP64 漂移就用 `--tolerance` 放宽并记录；Q15 记录）；
-      G-13 零度量 grouped aggregate、`sum(TINYINT)` HUGEINT 路径、`avg(DECIMAL)` DOUBLE 路径重点看。CPU 差分已证明 plan 本身正确，GPU 上的差异只能来自 Sirius 的物理执行
-- [ ] A0.6 每条查询 GPU 时间记录
+- [x] A0.5 22/22 与 DuckDB 基线逐行一致（`run-tpch.sh --data …` 自动校验；SF1 用仓库里的 `tests/expected/tpch-sf1`，SF10 先 `validate_tpch_results.py expected --data … --out …` 生成；容差默认 1e-9 相对 + 半 ulp，GPU 上 FP64 漂移就用 `--tolerance` 放宽并记录；Q15 记录）；
+      G-13 零度量 grouped aggregate、`sum(TINYINT)` HUGEINT 路径、`avg(DECIMAL)` DOUBLE 路径重点看。CPU 差分已证明 plan 本身正确，GPU 上的差异只能来自 Sirius 的物理执行 ← **已完成 2026-09-19** → 产出：**SF1 22/22 OK + G-13 探针 2/2 OK**（T4，`log/tpch/summary.csv`）。第一轮 15/22：
+      (1) **Q16 把 BE 进程搞崩**——引擎 `std::terminate`（MARK join 在定尺寸前被 task creator 轮询，`refresh_cross_schedule` throw；G-31）→ **引擎修复** `src/op/sirius_physical_hash_join.cpp::get_next_task_hint`（未定尺寸的 MARK join 返回等 build 生产者而不是 throw）；
+      (2) **Q17/Q20 引擎报错** "failed to translate mixed join inequality conditions to cuDF AST predicate"（不等值 join 条件里的 DECIMAL cast / 乘法进不了 cuDF AST；G-32）→ **引擎修复** `src/planner/sirius_plan_comparison_join.cpp::materialize_expression_join_keys`（不等值侧的复杂表达式也物化成投影列）；
+      (3) **Q1 `avg_*` 最后一位**：Sirius 的 `CAST(DOUBLE AS DECIMAL)` 截断、DuckDB 舍入（G-19 更新，7 个值差 1 ulp）→ 校验器新增 `--ulps`（默认 0.5，`run-tpch.sh` 执行模式传 1，结论里标出靠它过的值的个数）。Q15 无 FP64 等值问题（1 行一致）；`sum(TINYINT)`（Q12）、`count(DISTINCT)`（Q16）、零度量 group-by（G-13）都精确。
+      两处引擎修复后**透明路径回归**：同一批 parquet 上 22 条 SQL 经 `build/release/duckdb` 全部 GPU 执行（`replaced with GPU operator`）且与基线一致；`cargo fmt/clippy/test` 96+49+10 仍绿
+- [x] A0.6 每条查询 GPU 时间记录 ← **已完成 2026-09-19** → 产出：BE 每条查询打一行 `query executed on the engine query_id=… engine_ms=… rows=…`（`backend_service.rs::execute_timed`；日志改成无 ANSI 色码，脚本可 grep），`run-tpch.sh` 执行模式读回写 `--out/timings.csv`（query, rows, wall_ms, engine_ms, query_id）。
+      **SF1 · T4 · 单 BE 进程**：冷启动第一轮引擎合计 3.06 s，热后 **2.67–2.81 s / 22 条**（单条 57–304 ms：Q21 ≈300、Q9/Q8/Q2 ≈180–200、Q4/Q6 ≈60）；mysql 端到端合计 ≈5.8–6.0 s（FE 规划 + RPC + 取数，单条 100–510 ms）。数字见 `handoff.md`「A0.6 计时」，不代表 L40S
 - [ ] A0.7 **上游落地**（ADR-011 D-1 修订：A0 跑通后才做）：上游 Draft PR `sirius-db/sirius:dev ← morningman/sirius:experimental-doris`（CONTRIBUTING Self-contained 路径，按「PR reviewability」清单写，保持 Draft）+ re-open #137 贴链接与现状。
       **开 PR 前先把 `plan-doc/` 从分支拿掉**（09-18 晚起 plan-doc 随 `experimental-doris` 提交，只为两台机器同步；不属于上游）
 
