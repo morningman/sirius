@@ -90,6 +90,8 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
 - [ ] A0.7 **上游落地**（ADR-011 D-1 修订：A0 跑通后才做）：上游 Draft PR `sirius-db/sirius:dev ← morningman/sirius:experimental-doris`（CONTRIBUTING Self-contained 路径，按「PR reviewability」清单写，保持 Draft）+ re-open #137 贴链接与现状。
       **开 PR 前先把 `plan-doc/` 从分支拿掉**（09-18 晚起 plan-doc 随 `experimental-doris` 提交，只为两台机器同步；不属于上游）
 
+### [ ] 轨 1 · Doris vs Doris+Sirius 性能对比（SF10 起步）← **方案草案 2026-09-19，待拍板**：`experiments/sf10-bench/plan.md`（参考 Sirius CIDR'26 论文 / Sirius 仓库 harness / Doris 官方 TPC-H / ClickBench 的口径；机型建议 T0 现用 g4dn → T1 **g6e.4xlarge** 主结论 → T1′ 同价 CPU 机 c7i.12xlarge → T2 p5.4xlarge/g7e 头条；A 原生 BE vs B 伪 BE 同 FE 同 parquet；1 冷 + 3 热；结果进 `experiments/sf10-bench/results.md`）
+
 ### [ ] 轨 1 MVP-A · 真 fragment（store-and-forward；依赖 #1791 + #1792 `891d41c3`）
 ### [ ] 轨 1 MVP-B · 多节点（Arrow-over-gRPC 先，NIXL 后；依赖 #1792 `d7f2a7e3`）
 
