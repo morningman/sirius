@@ -278,7 +278,32 @@ glibc ≥ 2.28、io_uring 的 seccomp 放行。
 
 ---
 
+## ADR-012 · #1842 合入后的工作方式：工作分支 `doris-dev`、plan-doc 只在 fork、路线公开在 #2025、共享层先行
+
+**日期** 2026-10-06 · **状态** 第 1、2、4 条已定；第 3 条已在 #2025 提出，落点等维护者答复 · **关系** 修订 ADR-011 第 2 条（落点）、第 7 条（引擎依赖）；不动 ADR-011 的定位、版本、数据入口
+
+**依据**：#1840/#1841（09-24）、#1842（10-06）合入；#1842 review 中 felipeblazing 两次提出「和 StarRocks 尽量共享、和 libSirius 对齐」，mbrobbel 要求语义校验写成翻译器测试；10-06 核实的上游现状（#1791 已合，#2016 / #1965 / #1794 / #1696 / #1700 / #2008 / #1734 在途）。用户 10-06 拍板第 1 条。
+
+**决策**：
+1. **分支**：fork 上新开 `doris-dev`（基于 `main`），plan-doc 提交在这条分支上，只为两台机器同步；`experimental-doris` 归档，不再提交。开 PR 一律从 `main` 切新分支，只 cherry-pick 代码 commit，**plan-doc 不进任何上游 PR**。
+2. **路线公开**：上游 tracking issue [#2025](https://github.com/sirius-db/sirius/issues/2025) 取代 #137，写明六步：main 上重测 → 单进程多卡 → 单机真 fragment → 多 BE / 多机 → 覆盖面（并行）→ 以后（并发、中断、流式结果、轨 2）；外加与 StarRocks 共享代码的提议和五个问题。对外文字不用内部代号（MVP-x、P1.x、报告里的字母代号）。
+3. **共享层先行**：真 fragment（MVP-A）不在 `experimental/doris` 里单独复制 SR 的 exchange 代码。先在 #2025 和维护者定共享 Rust 代码的落点：`Fragment` 绑定和 stream 基数从 #2016 拆出来先合；engine actor、local exchange rendezvous、parked-sender registry 抽到 `rust/crates/` 下，由我们来抽。
+4. **引擎依赖（取代 ADR-011 第 7 条）**：C++ `ffi::Fragment` = #1791（已合）；Rust 绑定、stream 基数、local exchange、FFI `pin_table`、byte-range 扫描、NIXL 直连交换 = #2016（draft，aocsa）；`push_arrow` = #1965（draft）；byte-range 也在 #1696 / #1700。不再引用 #1792 的 `891d41c3` / `d7f2a7e3`（#1792 已于 10-02 关闭）。
+
+**理由**：
+- `experimental-doris` 的代码停在 review 之前，基线还是旧 `dev`；继续在上面 rebase，只会和 main 上审过的版本越走越远。
+- plan-doc 留在 fork 分支，两台机器照旧 `git pull` 同步；代价只是开 PR 时要挑 commit，以前就是这么做的（#1840～#1842 都是 cherry-pick 出来的）。
+- review 里明确要求共享，#2016 又正好把 MVP-A/B 需要的 exchange 代码放进了 `experimental/starrocks/src/`。Doris 是第二个用这套代码的 backend，这时候抽成共享 crate，成本最低。
+- #137 已随 #1842 关闭，后续工作需要一个公开、可引用的入口；README 里的跟踪链接也改指 #2025（`e97e2633`）。
+
+**放弃了什么**：继续在 `experimental-doris` 上迭代；plan-doc 单独放私有仓库（用户选了 fork 分支）；不等共享层、直接在 `experimental/doris` 里照抄 SR 的 exchange 代码做 MVP-A。
+
+**代价**：每次开 PR 都要手工排除 plan-doc 的 commit；MVP-A 的开工时间跟 #2016 的拆分节奏、维护者的答复绑在一起（没回复时可以先做 #2025 的第 1、2、5 步）；共享 crate 一旦落地，SR 那边的改动也要一起验证。
+
+---
+
 ## 开放问题
 
 见 `handoff.md` 的「待决问题」表。OQ-001 / OQ-006 已由 ADR-011 关闭；OQ-002 / OQ-003 属轨 2，搁置；
 OQ-007（MVP-B 传输）按 ADR-011 第 8 条 Arrow 先、NIXL 后；OQ-008 / OQ-009 在 P0 语料阶段核实。决定后在这里追加对应 ADR。
+OQ-011～OQ-013（合入后的主线顺序、共享代码落点、FFI 多卡/中断/并发）见 ADR-012 与 #2025。

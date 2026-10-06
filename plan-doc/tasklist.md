@@ -2,10 +2,10 @@
 
 进度约定：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成。完成时在条目后补一行 `→ 产出：<路径/commit>`。
 
-**当前阶段（2026-09-19）：两条轨。**
-- **轨 1 · 伪 BE（ADR-011，验证/benchmark 载体）**：P0 脚手架完成（2026-09-18）；P1 翻译器全部完成（2026-09-18）；MVP-A0 的 Mac 侧准备全部完成（2026-09-18 晚）；GPU 机（AWS `g4dn.2xlarge`）A0.4-0 Linux x64 三层验证通过（2026-09-19）；A0.4 引擎编成、引擎路径 BE 跑通（2026-09-19）；**A0.5 TPC-H 22/22 在 GPU 上与 DuckDB 基线一致 + A0.6 每条查询引擎时间已记录（2026-09-19，修了两处引擎问题 G-31/G-32）** → 下一步 **A0.7 上游落地**（含把引擎修复单独提 PR），之后 SF10 / MVP-A。
-  **上游 PR / re-open #137 推迟到 A0 跑通后**（用户 09-18 拍板，ADR-011 D-1 修订）——此前全部在 fork `morningman/sirius` 的 `experimental-doris` 上迭代。
-- **轨 2 · 进程内（ADR-010，产品路径）**：P0 可嵌入性调研已完成（2026-09-01，`embeddability-study.md`）；`push_arrow` 提案在 #1590 等回复；MVP-0 未开工、搁置。
+**当前阶段（2026-10-06）：两条轨。**
+- **轨 1 · 伪 BE（ADR-011/012）**：P0 → P1 → MVP-A0 全部完成，并已进上游：#1840/#1841 09-24 合入、**#1842（`experimental/doris`）10-06 合入**，#137 随之关闭。后续路线公开在 tracking issue [#2025](https://github.com/sirius-db/sirius/issues/2025)，对应下文「轨 1 · 合入后路线」。
+  工作分支改为 fork 上的 **`doris-dev`**（基于 `main`，带 plan-doc）；`experimental-doris` 归档；PR 从 `main` 切、不带 plan-doc（ADR-012）。
+- **轨 2 · 进程内（ADR-010，产品路径）**：P0 可嵌入性调研已完成（2026-09-01，`embeddability-study.md`）；`push_arrow` 提案在 #1590，aocsa 已按提案开了 #1965（draft，10-06）；MVP-0 未开工、搁置。
   轨 2 的 M0.1/M0.2（fragment dump + 语料）已由轨 1 的 P0 实现（语料两轨共用：`experimental/doris/tests/fixtures/tpch/`）。
 
 > 两条轨各有自己的 "P0"：下文「轨 1 · P0」= 脚手架，「P0 · Sirius 可嵌入运行时库可行性调研」= 轨 2。
@@ -50,7 +50,7 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
   - G-01～G-18 ↔ 负向单测对照表见 `handoff.md`「P1.5 负向用例对照」
 - [x] （可选、无对外影响）fork 内部 PR `morningman/sirius: experimental-doris → dev`，只为让 `experimental.yml` 跑起来（它不在 push 上触发；fork 的 Actions 已 enabled）；本机全绿是 macOS，CI 是 linux-64。**09-18 晚用户决定不在 Mac 阶段做，并入 A0.4-0 的 Linux 验证** ← **09-19 由 A0.4-0 在 GPU 机（ubuntu 24.04 x86_64，与 CI 同 OS）上本地跑 CI 同款三项替代，全绿；fork 内部 PR 仍未开**
 
-### [ ] 轨 1 MVP-A0 · 单节点、单计划
+### [x] 轨 1 MVP-A0 · 单节点、单计划 ← **已完成**（A0.1～A0.6 2026-09-19；A0.7 上游落地 2026-10-06）
 
 **Mac 可做的准备**（GPU 机买之前做完，让 GPU 那天只剩"跑 + 比"）← **全部完成 2026-09-18** → 产出：commit `22d161d9`（`fork/experimental-doris`）：
 - [x] A0.1 **DuckDB CPU 差分** ← **已完成 2026-09-18** → 产出：`scripts/build-duckdb-substrait.sh`（upstream DuckDB `v1.5.5` = 扩展钉的 `d8cdaa33` + 仓库 `substrait/` submodule → 可加载扩展 + shell，`.duckdb-substrait/`，≈3 min）、
@@ -87,8 +87,9 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
       两处引擎修复后**透明路径回归**：同一批 parquet 上 22 条 SQL 经 `build/release/duckdb` 全部 GPU 执行（`replaced with GPU operator`）且与基线一致；`cargo fmt/clippy/test` 96+49+10 仍绿
 - [x] A0.6 每条查询 GPU 时间记录 ← **已完成 2026-09-19** → 产出：BE 每条查询打一行 `query executed on the engine query_id=… engine_ms=… rows=…`（`backend_service.rs::execute_timed`；日志改成无 ANSI 色码，脚本可 grep），`run-tpch.sh` 执行模式读回写 `--out/timings.csv`（query, rows, wall_ms, engine_ms, query_id）。
       **SF1 · T4 · 单 BE 进程**：冷启动第一轮引擎合计 3.06 s，热后 **2.67–2.81 s / 22 条**（单条 57–304 ms：Q21 ≈300、Q9/Q8/Q2 ≈180–200、Q4/Q6 ≈60）；mysql 端到端合计 ≈5.8–6.0 s（FE 规划 + RPC + 取数，单条 100–510 ms）。数字见 `handoff.md`「A0.6 计时」，不代表 L40S
-- [ ] A0.7 **上游落地**（ADR-011 D-1 修订：A0 跑通后才做）：上游 Draft PR `sirius-db/sirius:dev ← morningman/sirius:experimental-doris`（CONTRIBUTING Self-contained 路径，按「PR reviewability」清单写，保持 Draft）+ re-open #137 贴链接与现状。
+- [x] A0.7 **上游落地**（ADR-011 D-1 修订：A0 跑通后才做）：上游 Draft PR `sirius-db/sirius:dev ← morningman/sirius:experimental-doris`（CONTRIBUTING Self-contained 路径，按「PR reviewability」清单写，保持 Draft）+ re-open #137 贴链接与现状。
       **开 PR 前先把 `plan-doc/` 从分支拿掉**（09-18 晚起 plan-doc 随 `experimental-doris` 提交，只为两台机器同步；不属于上游）
+      ← **已完成 2026-10-06** → 产出：拆成三个 PR，全部合入——#1840 join 修复（G-31/G-32，09-24）、#1841 `sirius_ffi` parquet 元数据缓存 + 日志 sink（09-24）、#1842 `experimental/doris`（10-06，mbrobbel 合；review 修复 `58e77f09`/`4773c46a`，harness、报告、SF10 基线按 review 移出）；#137 09-19 被 bwyogatama 重开、10-06 随合并关闭；后续路线 #2025
 
 ### [~] 轨 1 · Doris vs Doris+Sirius 性能对比（T0 SF10 跑通 ✅，**T1 g6e.8xlarge SF100/SF10/SF1 主表已出 ✅**，T1′ CPU 机 ⏳）← 方案 `experiments/sf10-bench/plan.md`（2026-09-19 拍板：§12 Q1/Q2/Q3/Q5 按建议），结果 `experiments/sf10-bench/results.md`（T1 正文 + T0 附录）
 
@@ -106,8 +107,27 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
 - [ ] B10-d **T1′**：c7i.24xlarge（配 8xlarge，$4.28/h）只装 `pixi install -e fe` + `fetch-fe/fetch-be`，跑 `native`/`native-split`/`native-olap` SF100，`bench-report.py report --runs <两台> --price native=4.28 --price sirius-buffered=4.529`
 - [ ] B11 T2 可选加测（p5.4xlarge / g7e.2xlarge 只跑 Sirius 侧）——等 T1 主结论后由用户定（§12 Q4）
 
-### [ ] 轨 1 MVP-A · 真 fragment（store-and-forward；依赖 #1791 + #1792 `891d41c3`）
-### [ ] 轨 1 MVP-B · 多节点（Arrow-over-gRPC 先，NIXL 后；依赖 #1792 `d7f2a7e3`）
+### [ ] 轨 1 MVP-A · 真 fragment（store-and-forward）→ 见下文「合入后路线」R4（依赖已变：#1791 已合；Rust `Fragment` 绑定、stream 基数、local exchange 在 #2016；#1792 已关）
+### [ ] 轨 1 MVP-B · 多节点 → 见下文「合入后路线」R5（直连交换 #1794/#2016 或 #1965 `push_arrow`；byte-range #1696/#1700）
+
+### [~] 轨 1 · 合入后路线（2026-10-06 起；上游 [#2025](https://github.com/sirius-db/sirius/issues/2025)，每条注明对应 #2025 的第几步；R3 对应 #2025 的「共享」一节）
+
+- [x] R0 收尾 ← **已完成 2026-10-06** → 产出：fork 分支 `doris-dev`（基于 `main` `bbc78b52`）：`5e17a209` plan-doc 搬入（含 `mvp-a0-test-report.md`）、`e932db91` harness 移植（14 个文件；去报告引用和代号、SF10 基线不进仓库、NUMA 切分 host tier、`run-tpch-duckdb.sh --ulps 0.5`）、`e97e2633` README 跟踪链接改 #2025；上游 tracking issue #2025；ADR-012
+- [ ] R1 **main 上重测**（#2025 第 1 步，GPU 机）：
+  - [ ] R1-a GPU 机切 `doris-dev`、重编引擎，SF1 跑 `bench-all.sh` 冒烟（验证 harness 移植）
+  - [ ] R1-b SF100 重跑 `native` / `sirius-buffered` / `native-olap` / `duckdb`（替换 #1842 里 rebase 前的数字）
+  - [ ] R1-c = B10-c pinned（`duckdb-gpu-pinned` SF100）；伪 BE 走 pin 要 FFI `pin_table`（#2016）
+  - [ ] R1-d = B10-d T1′ 同价 CPU 机（看预算）
+  - [ ] R1-e harness 上游 PR：从 `main` 切分支 cherry-pick `e932db91` + 修正，Draft，PR 描述放 R1-b 的数
+- [ ] R2 **单进程多卡**（#2025 第 2 步）：g6e.12xlarge，`num_gpus: 0`，SF100 起；先确认 FFI 路径能不能多卡（#2025 Q3）
+- [ ] R3 **共享层**：等 #2025 Q1/Q2 的答复 → `Fragment` 绑定先从 #2016 拆出合入；engine actor + local exchange rendezvous + parked registry 抽到 `rust/crates/`（由我们抽），SR 与 Doris 两边切换过去
+- [ ] R4 **MVP-A 真 fragment**（#2025 第 3 步）：每个 FE fragment 一个 `ffi::Fragment`；EXCHANGE → `sirius_stream_<id>`、DATA_STREAM_SINK → 声明输出、两阶段聚合用 Sirius 自己的 partial state、merging exchange → 接收侧 Sort；声明 stream 基数；单计划路径保留为单 BE 时的快路径；验收 22/22 + A0 vs A 逐条耗时对比
+- [ ] R5 **MVP-B 多 BE / 多机**（#2025 第 4 步）：remote exchange、byte-range 切分、每进程显存/pinned 预算、`FrontendService.report`
+- [ ] R6 **覆盖面**（#2025 第 5 步，Mac 可做，与上面并行）：
+  - [ ] R6-a 翻译器层语义断言（join 换边、聚合参数错位）进 `doris` CI job（mbrobbel 的 review 意见）
+  - [ ] R6-b TPC-DS translate-only 语料 + CPU 差分 + gap 频次表
+  - [ ] R6-c 随上游放开 gap：UNION/EXCEPT/INTERSECT（#1993/#1994）、GROUPING SETS（#1991）、cross product（#1968）、窗口（#1802）、upper/lower（#1971）、stddev_samp（#1975）
+  - [ ] R6-d 伪 BE 补 `FrontendService.report`（不补的话，伪 BE 一注册，原生 BE 的自动并行度就被压成 1）
 
 ---
 

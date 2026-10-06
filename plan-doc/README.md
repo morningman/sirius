@@ -2,6 +2,9 @@
 
 把 Apache Doris 接入 Sirius GPU 引擎的工程文档。**开工前先读 `handoff.md`。**
 
+这个目录只提交在 fork（`morningman/sirius`）的工作分支 `doris-dev` 上，**不进任何上游 PR**（ADR-012）。
+轨 1 的代码已合入上游 `main`（#1842），后续路线见 [#2025](https://github.com/sirius-db/sirius/issues/2025)。
+
 ## 一句话
 
 在 Doris BE 进程内做 fragment 子树卸载：Doris 继续负责扫描与调度，把计算最重的一段翻译成
@@ -17,7 +20,8 @@ Substrait 交给 Sirius 在 GPU 上跑，结果以 Arrow 回来。契约只有 S
 | **[embeddability-study.md](embeddability-study.md)** | 把 Sirius 变成可嵌入运行时库要做多少事、风险在哪、值不值得？（P0 产出，含实测） | 📌 调研报告，结论进 ADR-010 |
 | **[pseudo-be-feasibility.md](pseudo-be-feasibility.md)** | 照 `experimental/starrocks` 做 Doris 伪 BE（轨 1）要做多少事？SR 到哪了、社区/aocsa 在做什么、MVP 是什么？（2026-09-09） | 📌 调研报告，待 ADR-011 |
 | **[doris-pseudo-be-plan.md](doris-pseudo-be-plan.md)** | 轨 1 怎么落地？怎么跑、两侧改什么、环境、P0→MVP-B 步骤与验收、待拍板项（2026-09-18） | 📌 执行方案，随进度小改 |
-| **[experiments/](experiments/)** | P0.4 符号隔离实验的脚本与结果摘要（Docker 内复现，不需要 GPU） | 📚 可复现 |
+| **[experiments/](experiments/)** | P0.4 符号隔离实验的脚本与结果摘要（Docker 内复现，不需要 GPU）；`sf10-bench/` 是 Doris vs Doris+Sirius 基准的方案与结果 | 📚 可复现 |
+| **[mvp-a0-test-report.md](mvp-a0-test-report.md)** | 对外版 TPC-H 报告（英文，SF1/SF10/SF100，2026-09-19 的数字）；曾在 #1842 里作为 `docs/tpch-report.md`，review 时拿出了仓库，这里是唯一一份 | 📌 对外口径，改之前先看 handoff 里的写作规则 |
 | **[environment.md](environment.md)** | 代码在哪？怎么编？哪台机器能干什么？ | 📌 环境变化时更新 |
 | **[decisions.md](decisions.md)** | 这个选择当初为什么这么定的？ | ➕ 只追加，不改写历史 |
 | **[reference/doris-anatomy.md](reference/doris-anatomy.md)** | Doris 侧那段代码在哪个文件第几行？ | 📚 查阅 |

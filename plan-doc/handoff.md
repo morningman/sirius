@@ -6,35 +6,65 @@
 
 ## 当前状态
 
-**日期**：2026-09-19（第十三次 session，GPU 机换型后的第一次）
-**阶段**：**轨 1 · Doris vs Doris+Sirius 基准 · T1 主表已出，且修掉了伪 BE 最大的性能瓶颈**——机器原地改型成 **`g6e.8xlarge`**（L40S 48 GB / 32 vCPU / 248 GiB / 2×450 GB NVMe RAID0，$4.529/h；用户说的是 4xlarge，metadata 是 8xlarge，拍板保留），SF100 / SF10 / SF1 三个规模全部系统跑完且每轮 22 条过校验，结果与解读在 **`experiments/sf10-bench/results.md`**（T1 正文，T0 附录）。A0.7 上游落地仍往后排。仓库 `/home/yy2/gpu/sirius`（`origin` = fork，分支 `experimental-doris`）。
-**代码**：**引擎 `src/sirius_ffi.cpp`（commit `75606ff5`，单独提交，可上游）**：内嵌 DuckDB 开 DB 级 `parquet_metadata_cache`（Substrait 降级从每条 1～10 s 降到 55～220 ms）、FFI 路径认 `SIRIUS_LOG_*`、每条查询打 lower/plan/execute 三段耗时。跑批脚本：`bench-all.sh --expected/--host-capacity`、`olap-load.sh` 建库前 `DROP DATABASE FORCE`、`be-native.sh` 等 300 s、`be.sh stop` 等显存释放。**翻译器 / 伪 BE Rust 侧没动。** docs：`environment.md`「GPU 机」重写、`handoff.md` 两块新坑、`plan.md` §2、`tasklist.md` B10、`results.md` 重写。
+**日期**：2026-10-06（第十四次 session，#1842 合入当天）
+**阶段**：**轨 1 · MVP-A0 已全部进上游，进入合入后阶段。** #1840（join 修复）和 #1841（`sirius_ffi` 的 parquet 元数据缓存 + 日志 sink）09-24 合入；#1842（`experimental/doris`）10-06 由 mbrobbel 合入（mbrobbel 09-29、felipeblazing 10-05 approve）。#137 在 09-19 被 bwyogatama 重开过，合并时随之关闭。后续路线公开在上游 tracking issue **[#2025](https://github.com/sirius-db/sirius/issues/2025)**：六步路线、与 StarRocks 共享代码的提议、五个问题，cc 了 felipeblazing / mbrobbel / aocsa。
 
-T1 热跑 22 条合计（s；Sirius 两列是引擎修复后的 `-v2` 数字）：
+**分支**（ADR-012）：
+- **`doris-dev`**（fork，新工作分支，基于 `main` `bbc78b52`）：`5e17a209` plan-doc 原样搬入（含 `mvp-a0-test-report.md`，报告在仓库里已经没有了）→ `e932db91` harness 移植 → `e97e2633` README 的跟踪链接改成 #2025 → 本次 plan-doc 更新。
+- **`experimental-doris`**：归档（旧 `dev` 基线、review 前的代码），不再提交。
+- **开 PR**：从 `main` 切新分支，只 cherry-pick 代码 commit；**plan-doc 的 commit 一律不进 PR**（用户 10-06 拍板）。
 
-| SF | A Doris 外表 | C Doris 内表 | B O_DIRECT | **B′ page cache**（引擎） | R1 DuckDB 32 线程 | R2 透明路径 | R2-pinned | **A/B′** |
-|---|---|---|---|---|---|---|---|---|
-| SF100 | **154.4**（stock；split 205.4） | 18.0 | 91.7 | **40.6**（37.5） | 38.9 | 94.6（page cache 46.5） | — | **几何 3.01× · 总 3.80×** |
-| SF10 | **15.0**（split；stock 28.4） | 2.9 | 7.2 | **7.1**（4.9） | 4.1 | 7.9 | 2.0 | 1.77× · 2.13× |
-| SF1 | **5.2**（split；stock 8.0） | 1.8 | 3.1 | **3.1**（1.1） | 1.2 | 1.1 | 0.6 | 1.63× · 1.70× |
+**review 期间（09-20～10-06）**：commit 时区是 UTC、跑了 GPU 测试，应是在 GPU 机上做的；当时的 handoff 没推上来，以下据 GitHub 补记。rebase 到 `main`（#1840/#1841 已合）；修了 join/拼接器的 fail-closed 缺口、结果生命周期和包大小上限、thrift 并发、时间戳编码、CLI 默认值；校验器修了数值 scale 和缺基线时的退出码，`--ulps` 默认 0.5，已知的 cast 按查询+列限定（Q1 `avg_*`、Q8 `mkt_share`）；新增 3 条 NULL 探针（`NOT IN` 含 NULL、`LEFT JOIN … IS NULL`、`NOT EXISTS`）；harness、报告、SF10 基线按 review 移出 PR（`58e77f09`，09-24）。之后按 mbrobbel 的意见删掉定时的 `doris-cpu-diff` job，去掉 Doris submodule 的 `ignore = dirty`（`4773c46a`，09-29）。
 
-要记住的结论（细节 `results.md` §2）：(1) 主表 SF100 **3.01× / 3.80×，22 条全赢**（Q18 13.8×、Q3 11.1×；最低 Q14 1.36×）；规模越大越好（SF1 1.63× → SF100 3.01×），T0 的 2.03× 作废。(2) **修复前伪 BE 一半引擎时间在 Substrait 降级**（消费端每层 Relation 重绑定、parquet footer 重解析；SF100 lineitem 5232 个 row group），修后 B′ 98.6 → 40.6 s，与 32 线程 DuckDB 打平；伪 BE 的 plan 反而比 DuckDB 自己规划的略好（0.84×）。(3) GPU busy 中位数 46 %（修复前 22 %），pinned 表常驻显存的上限还有 2.4×——剩下是 parquet 解码 + 搬运。(4) SF100 装得下 L40S：GPU 池高水位 35.6 GiB，无 host/disk 降级。(5) Doris 内表 18 s 仍比 B′ 快 2.3×，如实写。
+**本次代码**：harness 移植到 `doris-dev`（`e932db91`，只在 fork，未开 PR）。14 个文件从 `experimental-doris` 搬回，改动如下：
+- 去掉对已删报告的引用和报告里的代号（A/B′/R1/R2、plan §x）。
+- SF10 基线不进仓库，`bench.sh` 在非 SF1 时默认找 `log/expected/tpch-<sf>`。
+- pinned host tier 的默认值按 NUMA 节点平分、下限 1Gi（PR review 里的 major 意见）。
+- `run-tpch-duckdb.sh` 的 `--ulps` 默认 1 → 0.5，与 main 上的 `run-tpch.sh` 一致。
+- `session.sql` 注释补回「与 `session-native*.sql` 互逆」的约定。
 
-**上游**：无变化（引擎修复 `75606ff5` 待开 PR）。
+**只在 Mac 上做了静态检查**：`bash -n`、shellcheck 无告警、`py_compile`、`--help`；`bench-report.py report` 用 T0 原始数据重出报告，几何平均 2.03×，与当时一致。**没在 GPU 机上跑过。**
+
+**上游这两周的变化**（影响路线）：
+
+| 变化 | 影响 |
+|---|---|
+| #1791 合入（10-01）：C++ `ffi::Fragment` 定稿（`build()` 不占查询窗口、`relay_from`、hash/broadcast 输出） | MVP-A 的 C++ 依赖已在 main |
+| Rust `Fragment` 绑定**不在 main**，在 aocsa 的 draft #2016（`460bc92a`）。同一个 PR 里还有 stream 基数（`478f0054`）、local exchange rendezvous + parked registry（`7a607e2e`，放在 `experimental/starrocks/src/`，≈740 行）、byte-range 扫描、FFI `pin_table`、NIXL 直连交换 | MVP-A/B 的依赖基本都在这一个 PR；共享层的提议写在 #2025 |
+| #1792 关闭（10-02）；#1965（draft）`Fragment::push_arrow`，是回应 #1590 那份提案写的 | MVP-B 的 Arrow 路径 / 轨 2 入口 |
+| UNION #1993、EXCEPT/INTERSECT ALL #1994、GROUPING SETS #1991、cross product #1968、窗口函数设计 #1802、upper/lower #1971、stddev_samp #1975 | G-11/12/15/16 可以随上游放开 |
+| 并发栈 #1997～#2015（draft），#2008 只管 SQL 连接 | FFI `Context` 会不会跟进，问在 #2025 |
+| 引擎支持单进程多卡；伪 BE 的 `conf/sirius.yaml` 钉 `num_gpus: 1` | 单机多卡可能只要改配置（FFI 路径没人测过） |
+| 根仓库 DuckDB 升到 1.5.6（#1912），`substrait/` 仍钉 1.5.5 分支 | CPU 差分仍用 1.5.5；`substrait` submodule 一动就跟着改 `DUCKDB_TAG` 和 `python-duckdb` |
+
+**本机状态**：`doris-dev` 已推 fork。Mac 的 `cucascade` submodule 仍漂在旧 commit（`git status` 显示 `M cucascade`，别提交）。GPU 机（`g6e.8xlarge`）现在开没开、仓库在哪个分支都未知；按小时计费，**用户先确认**。
 
 ## 下一步
 
-1. **先 push**（GPU 机没凭据）：`git push origin experimental-doris`。Mac 上开工前 `git pull --ff-only`。
-2. **T1′ c7i.24xlarge**（`tasklist.md` B10-d）：只装 `pixi install -e fe` + `fetch-fe/fetch-be`，NVMe 上生成 SF100（`tpchgen-cli` 要在那台机器上重编，见已知坑），跑 `native`/`native-split`/`native-olap`（`--price native=4.28`），`bench-report.py report --runs <两台>` 出每美元加速比。
-3. **引擎修复上游**：`75606ff5`（`src/sirius_ffi.cpp`）+ 上一 session 的 G-31/G-32 两处，按 CONTRIBUTING Self-contained 路径各开小 PR（base `dev`）；提前跑根仓库 `pixi run make test`。
-4. `duckdb-gpu-pinned` SF100 host-pin 版（B10-c）、`enable_prefetch_cache` 对 B′ 的效果；Q13/Q22 的 FE plan 比 DuckDB 慢 1.2～1.3×，看 join 顺序。
-5. 之后 A0.7 · 上游落地（Draft PR + re-open #137），见历史记录 2026-09-19 第十二次的清单。
-
-**本机状态**：FE（9030）跑着（全新集群，09-19 `fe.sh clean` 过）；两个 BE 都停了；`/mnt/nvme`（RAID0）上有 `tpch_parquet_sf{1,10,100}`、`expected-sf100`、`doris-storage`（内表现在是 SF1 的，`--load-olap` 会 FORCE 重建）；软链 `/tmp/tpch-sf{1,10,100}`。**停机即清**：`environment.md`「GPU 机」有重建命令。`log/bench-t1/` 里 `*-sirius*`（修复前）和 `*-sirius*-v2`（修复后）都在。
+1. **看 #2025 的回复**（felipeblazing / mbrobbel / aocsa）：共享 Rust 代码放哪、`Fragment` 绑定能否先从 #2016 拆出来、FFI 能否多卡/interrupt/并发。回复决定第 6 步怎么写。
+2. **GPU 机切到 `doris-dev`**：fetch fork 上的 `doris-dev`；`main` 以来引擎变了，先重编（`pixi run make TEST_BUILD_TARGET=`，再 `scripts/engine-cargo.sh build --release -p sirius-doris-be`）。先用 SF1 跑一遍 `bench-all.sh` 冒烟，验证移植（`--ulps 0.5`、NUMA 切分、`log/expected` 回退）；再 **SF100 在 main 上重跑**（`native`、`sirius-buffered`、`native-olap`、`duckdb`），补 **B10-c pinned**（`duckdb-gpu-pinned`）。对应 #2025 第 1 步。
+3. **单机多卡**（#2025 第 2 步）：g6e.12xlarge（4×L40S），`conf/sirius.yaml` 改 `num_gpus: 0`，从 SF100 起跑。FFI 路径的多卡没人测过，先看能不能起来。
+4. T1′ 同价 CPU 机（c7i.24xlarge，B10-d），看预算。
+5. **Mac 并行线**（不需要 GPU）：
+   - 按 mbrobbel 的意见，把 cpu-diff 能抓到的错（join 换边、聚合参数错位）写成翻译器层的断言，放进 `doris` job。
+   - 采 TPC-DS translate-only 语料：多少条能翻、多少条 CPU 差分一致，外加按出现次数排的 gap 清单。
+   - 伪 BE 补 `FrontendService.report`。
+6. 共享层定下来以后做 **MVP-A**（#2025 第 3 步），然后 MVP-B。
+7. **harness PR**：第 2 步的数出来后，从 `main` 切分支 cherry-pick `e932db91`（加上跑出来的修正），按 CONTRIBUTING 的 PR reviewability 清单开 Draft。
 
 ---
 
 ## 已知坑（累积，发现一条加一条）
+
+### 🔴 合入后的工作方式（2026-10-06）
+
+- **两条分支别搞混**：`doris-dev` 是工作分支（基于 `main`，带 plan-doc）；`experimental-doris` 是归档（旧 `dev` 基线、review 前的代码），不要再往上提交，也别拿它和 main 比代码。
+- **plan-doc 不进上游 PR**：PR 分支从 `main` 切，只 cherry-pick 代码 commit；cherry-pick 前先 `git show --stat <commit>`，确认不碰 `plan-doc/`。
+- **commit hook**：仓库 `.claude/settings.json` 里的 `git commit` hook 会把 plan-doc 判成 AI 笔记拒掉，提交走脚本（在 `bash <脚本>` 里执行 `git commit -F`）。代码 commit 走脚本时，自己先查一遍有没有规划代号（MVP-x、P1.x）、plan-doc 引用、报告里的字母代号。仓库里只定义了 G-01～G-19（`docs/semantics-gaps.md`），G-25 以后的编号只在 plan-doc 里有，别写进代码。
+- **`experimental/` 不在 pre-commit 范围**（根 `.pre-commit-config.yaml` 全局 `exclude: ^experimental/`），CI 只跑 Rust fmt/clippy/test。shell 脚本自己跑 `shellcheck -S warning`（Mac 上 Homebrew 有），Python 自己 `py_compile`。
+- **main 上校验器的 `--ulps` 语义变了**：默认 0.5，已知的结果 cast 按查询+列限定（Q1 `avg_*`、Q8 `mkt_share` 放宽一位），不再全局用 `--ulps 1`（review 认为全局放宽会掩盖问题）。下面 A0.5 一节里「`run-tpch.sh` 执行模式默认 `--ulps 1`」已过时。
+- **harness 移植后还没在 GPU 机上跑过**：第一次先 SF1 冒烟。`run-tpch-duckdb.sh` 的 `--ulps` 从 1 改成了 0.5，`duckdb-gpu` 要是出现末位差异，先看这里。
+- **对外报告的写作规则**（`mvp-a0-test-report.md`，以及将来 harness PR 的描述，用户 09-19 定的）：正文不出现任务编号、内部代号和文档引用（G-13、MVP-A0、stock、B′、T1 这类）；不写中间的优化过程，只给最终数字；七个场景各写目的，各给一个明确的对比结论和它为什么重要；不影响结论的细节不写（比如 decimal 末位精度）；引擎修复的事实只放附录。主对比是「Doris 外表（每个规模取更快的配置）vs Doris + Sirius 走 page cache」。
 
 ### 🔴 伪 BE 引擎时间一半花在 Substrait 降级上（2026-09-19，SF100 定位；引擎修复 `75606ff5`）
 
@@ -342,12 +372,15 @@ T1 热跑 22 条合计（s；Sirius 两列是引擎修复后的 `-v2` 数字）�
 | **OQ-002** | 进程内 vs 边车 | MVP-1 的形态 | **已决**：ADR-010 —— MVP-1/2 进程内（前提是 libsirius 满足 4 条链接约束），MVP-3 前后切边车 |
 | **OQ-003** | Doris 侧通用改进走上游 PR 还是先在 wt-gpu 攒着 | M1.1 | 倾向独立提上游 —— 它们本身有价值 |
 | **OQ-004** | 英文提案什么时候提交 Sirius 社区 | — | **已提（2026-09-01）**：`push_arrow` 提案挂在 https://github.com/sirius-db/sirius/issues/1590#issuecomment-5494647357（只提了方案一；libsirius 链接约束 / C ABI / 配置三项留待后续，素材在 study §8.4）。等维护者（aocsa / mbrobbel）回复，重点看线程契约那一点 |
-| **OQ-005** | `push_arrow` 的线程契约：能否在 `run()` 期间从其他线程调用 | MVP-1 能否边扫边算；否则先 store-and-forward | 已在 #1590 提出，等 Sirius 侧答复 |
+| **OQ-005** | `push_arrow` 的线程契约：能否在 `run()` 期间从其他线程调用 | MVP-1 能否边扫边算；否则先 store-and-forward | 已在 #1590 提出；**10-06 更新**：aocsa 的 #1965（draft）按提案实现了 `Fragment::push_arrow`（同步 H2D，调用方可立即释放），线程契约仍是「一个 `Context` 上 build/run 串行」 |
 | **OQ-006** | 轨 1 落点：sirius `experimental/doris/` 还是独立仓库 | 轨 1 P0 | **已决**（09-18，ADR-011 第 2 条）：fork 上的 `experimental/doris/` 起步；**上游 PR / re-open #137 推迟到 MVP-A0 跑通后**（09-18 晚修订，原为 P1 结束 + CI 绿） |
-| **OQ-007** | MVP-B 传输：等 aocsa NIXL 还是先用 Arrow-over-gRPC + `push_arrow` | MVP-B | **09-18 更新**：Arrow 路径已是 aocsa 主线 demo（#1792），照它做私有 gRPC `transmit_arrow` 拿正确性；性能等 #1794（NIXL）合并 |
+| **OQ-007** | MVP-B 传输：等 aocsa NIXL 还是先用 Arrow-over-gRPC + `push_arrow` | MVP-B | **09-18 更新**：Arrow 路径已是 aocsa 主线 demo（#1792），照它做私有 gRPC `transmit_arrow` 拿正确性；性能等 #1794（NIXL）合并。**10-06 更新**：#1792 已关；直连交换在 #1794 / #2016，Arrow 路径用 #1965 的 `push_arrow`；先定共享层（#2025） |
 | **OQ-008** | Q16 `count(distinct)` 在 Doris FE 的 phasing 能否规划成 group-by 形态 | MVP-A | **已答**（09-18 语料 `q16`）：不是嵌套 group-by，而是两阶段 `multi_distinct_count`（叶子 `partial_multi_distinct_count(ps_suppkey)` update-serialize → 上层 merge-finalize，`TAggregateExpr.is_merge_agg` 区分）。A0 拼接器合成单阶段 `count(distinct)`；A 阶段两端都是 Sirius，partial state 自定 |
 | **OQ-009** | Doris master 是否已用 `TExprNodeType.PREDICATE/LITERAL` 代替旧枚举 | 翻译器 | **已答**（09-18，pin 4.1.4）：IDL 里有 `PREDICATE=43/LITERAL=44`，但 FE 4.1.4 **不用**——22 条语料只出现 `SLOT_REF / *_LITERAL / BINARY_PRED / COMPOUND_PRED / ARITHMETIC_EXPR / CAST_EXPR / FUNCTION_CALL / IN_PRED / AGG_EXPR`。翻译器只做旧枚举；换 tag 时用 `run-tpch.sh --translate-only` 重采一遍看 INDEX.md 的覆盖行 |
 | **OQ-010** | 两轨并行的人力分配 | — | 会后定；P0 语料与白名单两轨共用 |
+| **OQ-011** | 合入后的主线顺序：先补证据（main 上重测、pinned、多卡、T1′）还是先做 MVP-A | #2025 第 1～4 步的排期 | #2025 按「重测 → 多卡 → 真 fragment → 多 BE」公开；用户可调 |
+| **OQ-012** | 两个 backend 共享的 Rust 代码放哪：新 crate、`rust/crates/sirius`，还是等 libSirius 边界 | MVP-A 的写法 | 问在 #2025（Q1/Q2），等维护者 |
+| **OQ-013** | FFI 路径能否单进程多卡、能否中断正在跑的查询、能否并发 | #2025 第 2 步与第 6 步 | 问在 #2025（Q3～Q5）；多卡也可以直接在 4 卡机上试 |
 
 ---
 
@@ -357,6 +390,21 @@ T1 热跑 22 条合计（s；Sirius 两列是引擎修复后的 `-v2` 数字）�
 
 <details>
 <summary>历史记录</summary>
+
+### 2026-10-06（第十四次，#1842 合入当天，Mac）
+核对上游：三个 PR 全部合入（#1840/#1841 09-24，#1842 10-06），#137 随之关闭；#1791 已合；Rust `Fragment` 绑定、stream 基数、local exchange 都在 aocsa 的 #2016 里；#1965 是 push_arrow；#1792 已关。给用户出了后续路线：main 上重测、单机多卡、先定共享层再做 MVP-A/B、Mac 并行线。用户拍板 plan-doc 放 fork 分支、PR 不带。新开 `doris-dev`（基于 main）：plan-doc 搬入；harness 移植（去掉报告引用和代号、SF10 基线不进仓库、NUMA 切分、`--ulps` 0.5）；README 链接改成 #2025。上游开 tracking issue #2025（六步路线 + 共享提议 + 五个问题）。新增 ADR-012。
+
+#### 参考表（第十三次 session 的「当前状态」：T1 主表，2026-09-19）
+
+T1 热跑 22 条合计（s；Sirius 两列是引擎修复后的 `-v2` 数字）：
+
+| SF | A Doris 外表 | C Doris 内表 | B O_DIRECT | **B′ page cache**（引擎） | R1 DuckDB 32 线程 | R2 透明路径 | R2-pinned | **A/B′** |
+|---|---|---|---|---|---|---|---|---|
+| SF100 | **154.4**（stock；split 205.4） | 18.0 | 91.7 | **40.6**（37.5） | 38.9 | 94.6（page cache 46.5） | — | **几何 3.01× · 总 3.80×** |
+| SF10 | **15.0**（split；stock 28.4） | 2.9 | 7.2 | **7.1**（4.9） | 4.1 | 7.9 | 2.0 | 1.77× · 2.13× |
+| SF1 | **5.2**（split；stock 8.0） | 1.8 | 3.1 | **3.1**（1.1） | 1.2 | 1.1 | 0.6 | 1.63× · 1.70× |
+
+要记住的结论（细节 `experiments/sf10-bench/results.md` §2）：(1) 主表 SF100 **3.01× / 3.80×，22 条全赢**（Q18 13.8×、Q3 11.1×；最低 Q14 1.36×）；规模越大越好（SF1 1.63× → SF100 3.01×）。(2) 修复前伪 BE 一半引擎时间在 Substrait 降级，修后 B′ 98.6 → 40.6 s，与 32 线程 DuckDB 打平。(3) GPU busy 中位数 46 %，pinned 表常驻显存的上限还有 2.4×，剩下的是 parquet 解码 + 搬运。(4) SF100 装得下 L40S：GPU 池高水位 35.6 GiB，无降级。(5) Doris 内表 18 s 仍比 B′ 快 2.3×。
 
 ### 2026-09-19（第十三次，GPU 机换型 g6e.8xlarge）
 环境检查：机型实际 8xlarge（拍板保留）、引擎免重编、两块实例盘 RAID0、FE `clean` 重来、`tpchgen-cli` SIGILL 重编、原生 BE 冷起 2 min（等待 300 s）。SF10 8 系统 11 min、SF100 7 系统 57 min（`olap-load.sh` colocate 桶数坑 → FORCE）、SF1 8 系统 7 min，全部过校验。主表 SF100 A stock vs B′ 1.34× / 1.56×；GPU busy 22 %；B vs R2 1.42×（plan 形状）；SF100 无降级（35.6 GiB）；DuckDB 32 线程 39 s、内表 18 s。`results.md` 重写为 T1，T0 挪到附录；`environment.md` GPU 机一节重写。随后追查 B vs R2 的 1.42×：telemetry 查询窗口 + `execute_substrait` 分段计时定位到 **Substrait 降级占引擎时间一半**（消费端逐层重绑定、parquet footer 重解析），引擎 `75606ff5` 开 DB 级 `parquet_metadata_cache`（+ FFI 认 `SIRIUS_LOG_*`），SF100 B′ 98.6 → 40.6 s（3.01× / 3.80×），三个规模的 Sirius 系统重跑、报告重出。下一步：T1′ CPU 机、引擎修复上游。
