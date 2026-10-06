@@ -38,7 +38,7 @@ The engine actor, executor seam, MySQL row encoder, thrift listener, and Substra
 registry currently have counterparts under `experimental/starrocks/`. These experimental
 backends keep their protocol shells independent while the shared libSirius Rust boundary is
 being designed. This Doris integration is tracked in
-[#137](https://github.com/sirius-db/sirius/issues/137); changes to common behavior must be
+[#2025](https://github.com/sirius-db/sirius/issues/2025); changes to common behavior must be
 checked in both backends until that boundary is available.
 
 ## Running on a laptop (no GPU)
