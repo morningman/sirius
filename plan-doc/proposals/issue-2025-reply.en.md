@@ -1,4 +1,4 @@
-<!-- Draft reply to mbrobbel on https://github.com/sirius-db/sirius/issues/2025 (2026-10-06). Not posted yet. -->
+<!-- Posted 2026-10-06 as https://github.com/sirius-db/sirius/issues/2025#issuecomment-6017884989 (text below is exactly what was posted). -->
 
 Thanks @mbrobbel, that answers most of it. Adjusting the plan:
 

@@ -348,6 +348,8 @@ benchmark 叙事要用）。拼接器里最难的一点是把第二阶段聚合�
 
 ### MVP-A · 单节点、真 fragment（≈3–4 周，GPU）
 
+> **2026-10-06 更新（ADR-013）**：本节在伪 BE 里基于 `ffi::Fragment` 做 store-and-forward、自建 exchange（Arrow-over-gRPC，再换 NIXL）的做法已放弃。真 fragment 和多 BE 改为跟 #1807（exchange 进 Sirius，翻译器发 `ExchangeRel` / `ReadRel`），一 BE 一卡；见 `tasklist.md`「合入后路线」R4/R5。
+
 验收：22/22 按 FE 的 fragment 拓扑逐个执行（store-and-forward），结果同 A0；有 A0 vs A 的 per-query 时间对比。
 
 1. 引擎 seam 换成 `Fragment` 生命周期（#1791 + #1792 的 Rust 绑定，未合就 cherry-pick）：receiver-first 注册 stream → 叶子 `build()`+`run()` → 输出 parked → 上游 `declare_input_*` + `relay_from` → `run()` → … → 结果 fragment `take_result`。
@@ -356,6 +358,8 @@ benchmark 叙事要用）。拼接器里最难的一点是把第二阶段聚合�
 3. 失败传播：中间 fragment 失败 → 结果 instance 的 `fetch_data` 回错误（SR `stacked/cn-result-store-failure-propagation` 的做法）。
 
 ### MVP-B · 多节点、一 GPU 一 BE（≈4–6 周 + 上游）
+
+> **2026-10-06 更新（ADR-013）**：本节在伪 BE 里基于 `ffi::Fragment` 做 store-and-forward、自建 exchange（Arrow-over-gRPC，再换 NIXL）的做法已放弃。真 fragment 和多 BE 改为跟 #1807（exchange 进 Sirius，翻译器发 `ExchangeRel` / `ReadRel`），一 BE 一卡；见 `tasklist.md`「合入后路线」R4/R5。
 
 验收：SF100 在 2–4 张卡上 22/22；有第一份可对外的数字（沿用对方 deck 的 break-even 框架，逐条列 GPU vs CPU）。
 

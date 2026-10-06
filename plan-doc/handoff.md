@@ -7,7 +7,7 @@
 ## 当前状态
 
 **日期**：2026-10-06（第十四次 session，#1842 合入当天）
-**阶段**：**轨 1 · MVP-A0 已全部进上游，进入合入后阶段。** #1840（join 修复）和 #1841（`sirius_ffi` 的 parquet 元数据缓存 + 日志 sink）09-24 合入；#1842（`experimental/doris`）10-06 由 mbrobbel 合入（mbrobbel 09-29、felipeblazing 10-05 approve）。#137 在 09-19 被 bwyogatama 重开过，合并时随之关闭。后续路线公开在上游 tracking issue **[#2025](https://github.com/sirius-db/sirius/issues/2025)**：六步路线、与 StarRocks 共享代码的提议、五个问题，cc 了 felipeblazing / mbrobbel / aocsa。
+**阶段**：**轨 1 · MVP-A0 已全部进上游，进入合入后阶段。** #1840（join 修复）和 #1841（`sirius_ffi` 的 parquet 元数据缓存 + 日志 sink）09-24 合入；#1842（`experimental/doris`）10-06 由 mbrobbel 合入（mbrobbel 09-29、felipeblazing 10-05 approve）。#137 在 09-19 被 bwyogatama 重开过，合并时随之关闭。后续路线公开在上游 tracking issue **[#2025](https://github.com/sirius-db/sirius/issues/2025)**（cc 了 felipeblazing / mbrobbel / aocsa）。mbrobbel 当天答复后，路线按他的意见调整（ADR-013），已回帖、在 #1807 贴了 Doris 的 exchange 映射、#2025 正文改成新路线。
 
 **#2025 的第一条答复**（mbrobbel，10-06 11:25Z；aocsa 还没回）：
 - Q1 共享代码：**现在不做两个 backend 之间的代码共享**。先定 #1728（Sirius 作为独立库）的 API，`sirius` Rust crate 建在它上面，提供 context、建 plan、通过 handle 执行（可取消、可查进度）、和 streaming 算子 push/pull 批。在这之前 `ffi` API 保留，等新 API 够用了再切过去。
@@ -18,7 +18,10 @@
 - 另外：mbrobbel 已开始做 **#1807「把 exchange 搬进 Sirius」**。方案是 Sirius 里跑 NIXL agent；翻译时 `DATA_STREAM_SINK` → Substrait `ExchangeRel`（新的 exchange sink 算子），`EXCHANGE_NODE` → `ReadRel`（新的 exchange source 算子），exchange 的细节放在 metadata 里；新增 exchange executor 负责收发；先用 NIXL staging buffer + `cudf::pack`；只做 Sirius 节点之间的交换，不兼容 StarRocks 自己的 exchange。目前还没有子 issue。
 - 相关 issue：#1728 的子项有 #1750（物理 plan builder 接口）、#1734（打包）；#839（stream session：push/close_input、pull/wait）；#840（资源管理 API：宿主和 Sirius 共用内存预算，正是轨 2 要的）。
 
-**据此建议调整路线（待用户确认，确认后改 tasklist、追加 ADR-013、改 #2025 正文）**：#2025 第 2 步（单 BE 多卡）搁置；ADR-012 第 3 条（抽共享 crate）作废；第 3、4 步（真 fragment、多 BE）不再在伪 BE 里用 `ffi::Fragment` 做 Rust 侧的 store-and-forward 和 exchange 编排，改为跟 #1807：等它的设计落定后，Doris 翻译器把 `DATA_STREAM_SINK` / `EXCHANGE_NODE` 映射到 `ExchangeRel` / `ReadRel`，多 BE（一 BE 一卡）跟着 NIXL exchange 走；取消和并发等 #1728 的执行 handle 和 #1303。第 1、5 步不受影响。
+**路线调整（用户 10-06 确认，ADR-013）**：一个 BE 一块 GPU，#2025 第 2 步（单 BE 多卡）搁置；不抽共享 crate（ADR-012 第 3 条作废）；第 3、4 步（真 fragment、多 BE）跟 #1807，翻译器把 `DATA_STREAM_SINK` / `EXCHANGE_NODE` 映射到 `ExchangeRel` / `ReadRel`，伪 BE 里不再做基于 `ffi::Fragment` 的 store-and-forward 和自建 exchange；取消、进度、并发等 #1728 的执行 handle 和 #1303（第 6 步）；近期主线是第 1 步（main 上重测、harness PR）和第 5 步（覆盖面）。已经做的：
+- #1807 贴了 Doris 的 exchange 映射（[comment](https://github.com/sirius-db/sirius/issues/1807#issuecomment-6017881212)，存档 `proposals/issue-1807-doris-exchange.en.md`）：分区类型、目的地、sender 计数、merging exchange、派发方式，建议 metadata 用不透明的 peer id、由宿主 backend 解析到 NIXL agent。
+- #2025 回帖（[comment](https://github.com/sirius-db/sirius/issues/2025#issuecomment-6017884989)，存档 `proposals/issue-2025-reply.en.md`），@aocsa 说明 Q2 已不在 Doris 的关键路径上。
+- #2025 正文改成新路线（存档 `proposals/issue-2025-body.en.md`）：保留原步骤编号，第 2 步划掉，第 3、4、6 步改写，共享代码的提议标为不做，五个问题各附一句答复。
 
 **分支**（ADR-012）：
 - **`doris-dev`**（fork，新工作分支，基于 `main` `bbc78b52`）：`5e17a209` plan-doc 原样搬入（含 `mvp-a0-test-report.md`，报告在仓库里已经没有了）→ `e932db91` harness 移植 → `e97e2633` README 的跟踪链接改成 #2025 → 本次 plan-doc 更新。
@@ -40,29 +43,28 @@
 
 | 变化 | 影响 |
 |---|---|
-| #1791 合入（10-01）：C++ `ffi::Fragment` 定稿（`build()` 不占查询窗口、`relay_from`、hash/broadcast 输出） | MVP-A 的 C++ 依赖已在 main |
-| Rust `Fragment` 绑定**不在 main**，在 aocsa 的 draft #2016（`460bc92a`）。同一个 PR 里还有 stream 基数（`478f0054`）、local exchange rendezvous + parked registry（`7a607e2e`，放在 `experimental/starrocks/src/`，≈740 行）、byte-range 扫描、FFI `pin_table`、NIXL 直连交换 | MVP-A/B 的依赖基本都在这一个 PR；共享层的提议写在 #2025 |
+| #1791 合入（10-01）：C++ `ffi::Fragment` 定稿（`build()` 不占查询窗口、`relay_from`、hash/broadcast 输出） | 按 ADR-013，伪 BE 不再直接基于它做真 fragment（改跟 #1807） |
+| Rust `Fragment` 绑定**不在 main**，在 aocsa 的 draft #2016（`460bc92a`）。同一个 PR 里还有 stream 基数（`478f0054`）、local exchange rendezvous + parked registry（`7a607e2e`，放在 `experimental/starrocks/src/`，≈740 行）、byte-range 扫描、FFI `pin_table`、NIXL 直连交换 | 按 ADR-013 不再依赖它的 exchange；伪 BE 走 pin（R1-c）仍要它的 FFI `pin_table` |
 | #1792 关闭（10-02）；#1965（draft）`Fragment::push_arrow`，是回应 #1590 那份提案写的 | MVP-B 的 Arrow 路径 / 轨 2 入口 |
 | UNION #1993、EXCEPT/INTERSECT ALL #1994、GROUPING SETS #1991、cross product #1968、窗口函数设计 #1802、upper/lower #1971、stddev_samp #1975 | G-11/12/15/16 可以随上游放开 |
-| 并发栈 #1997～#2015（draft），#2008 只管 SQL 连接 | FFI `Context` 会不会跟进，问在 #2025 |
-| 引擎支持单进程多卡；伪 BE 的 `conf/sirius.yaml` 钉 `num_gpus: 1` | 单机多卡可能只要改配置（FFI 路径没人测过） |
+| 并发栈 #1997～#2015（draft），#2008 只管 SQL 连接 | 已答：context 内并发由 #1303 做（wmalpica） |
+| 引擎支持单进程多卡；伪 BE 的 `conf/sirius.yaml` 钉 `num_gpus: 1` | 已答：这套用法下多卡要和 streaming 算子协调，建议一 BE 一卡 |
 | 根仓库 DuckDB 升到 1.5.6（#1912），`substrait/` 仍钉 1.5.5 分支 | CPU 差分仍用 1.5.5；`substrait` submodule 一动就跟着改 `DUCKDB_TAG` 和 `python-duckdb` |
 
 **本机状态**：`doris-dev` 已推 fork。Mac 的 `cucascade` submodule 仍漂在旧 commit（`git status` 显示 `M cucascade`，别提交）。GPU 机（`g6e.8xlarge`）现在开没开、仓库在哪个分支都未知；按小时计费，**用户先确认**。
 
 ## 下一步
 
-1. **#2025**：mbrobbel 已答（见「当前状态」），用户确认路线调整后：回帖（草稿：`proposals/issue-2025-reply.en.md`，以及给 #1807 的 Doris exchange 映射 `proposals/issue-1807-doris-exchange.en.md`，都还没发）、改 issue 正文的路线、tasklist 和 ADR-013 跟上。等 aocsa 对 Q2 的答复（exchange 进了 Sirius 以后，这条对 Doris 已经不阻塞）。盯 #1807 的子 issue，及早把 Doris 的 exchange 映射（分区类型、目的地、sender 计数、merging exchange）提给它。
-2. **GPU 机切到 `doris-dev`**：fetch fork 上的 `doris-dev`；`main` 以来引擎变了，先重编（`pixi run make TEST_BUILD_TARGET=`，再 `scripts/engine-cargo.sh build --release -p sirius-doris-be`）。先用 SF1 跑一遍 `bench-all.sh` 冒烟，验证移植（`--ulps 0.5`、NUMA 切分、`log/expected` 回退）；再 **SF100 在 main 上重跑**（`native`、`sirius-buffered`、`native-olap`、`duckdb`），补 **B10-c pinned**（`duckdb-gpu-pinned`）。对应 #2025 第 1 步。
-3. ~~**单机多卡**（#2025 第 2 步）~~ **搁置**：mbrobbel 建议一个 BE 一块 GPU（这套用法下多卡要和 streaming 算子协调，不会自动工作）。以后为多 BE 租了多卡机，可以顺手在单计划路径上试一下 `num_gpus`，但不作为方向。
-4. T1′ 同价 CPU 机（c7i.24xlarge，B10-d），看预算。
-5. **Mac 并行线**（不需要 GPU）：
+1. **盯 #1807 和 #2025**：#1807 出子 issue 或设计稿后，第一时间按 Doris 的映射去评审（目的地/peer 怎么表示、sender 计数、merging exchange、两阶段聚合的 partial state）；#2025 等 aocsa 对 Q2 的答复，以及其他人对路线的意见。
+2. **GPU 机切到 `doris-dev`**（#2025 第 1 步）：fetch fork 上的 `doris-dev`；`main` 以来引擎变了，先重编（`pixi run make TEST_BUILD_TARGET=`，再 `scripts/engine-cargo.sh build --release -p sirius-doris-be`）。先用 SF1 跑一遍 `bench-all.sh` 冒烟，验证移植（`--ulps 0.5`、NUMA 切分、`log/expected` 回退）；再 **SF100 在 main 上重跑**（`native`、`sirius-buffered`、`native-olap`、`duckdb`），补 **B10-c pinned**（`duckdb-gpu-pinned`）。
+3. T1′ 同价 CPU 机（c7i.24xlarge，B10-d），看预算。
+4. **harness PR**：第 2 步的数出来后，从 `main` 切分支 cherry-pick `e932db91`（加上跑出来的修正），按 CONTRIBUTING 的 PR reviewability 清单开 Draft。
+5. **Mac 并行线**（#2025 第 5 步，不需要 GPU）：
    - 按 mbrobbel 的意见，把 cpu-diff 能抓到的错（join 换边、聚合参数错位）写成翻译器层的断言，放进 `doris` job。
    - 采 TPC-DS translate-only 语料：多少条能翻、多少条 CPU 差分一致，外加按出现次数排的 gap 清单。
-   - 伪 BE 补 `FrontendService.report`。
-6. **真 fragment / 多 BE**（#2025 第 3、4 步）：建议改为跟 #1807（待用户确认），不再先在伪 BE 里做 `ffi::Fragment` 上的 store-and-forward；#1807 的算子和 metadata 定下来以后，翻译器发 `ExchangeRel` / `ReadRel`，伪 BE 把 Doris 的 `brpc_server` 地址映射到 Sirius 的 exchange peer。单计划路径保留为单 BE 时的快路径。
-7. **harness PR**：第 2 步的数出来后，从 `main` 切分支 cherry-pick `e932db91`（加上跑出来的修正），按 CONTRIBUTING 的 PR reviewability 清单开 Draft。
-
+   - 伪 BE 补 `FrontendService.report`（第 4 步的多 BE 和混部都要）。
+6. **#1807 的算子和 metadata 定下来以后**（#2025 第 3、4 步）：翻译器发 `ExchangeRel` / `ReadRel`，每个 FE fragment 单独一个 plan；伪 BE 把 Doris 的 `brpc_server` + `fragment_instance_id` 映射到 Sirius 的 exchange peer；先单 BE，再多 BE（一 BE 一卡）。单计划路径保留为单 BE 时的快路径。
+7. 可选：把 P0 可嵌入性调研的结论整理成英文需求，提给 #1728 / #840（轨 2 的前提）。
 ---
 
 ## 已知坑（累积，发现一条加一条）
@@ -389,7 +391,7 @@
 | **OQ-008** | Q16 `count(distinct)` 在 Doris FE 的 phasing 能否规划成 group-by 形态 | MVP-A | **已答**（09-18 语料 `q16`）：不是嵌套 group-by，而是两阶段 `multi_distinct_count`（叶子 `partial_multi_distinct_count(ps_suppkey)` update-serialize → 上层 merge-finalize，`TAggregateExpr.is_merge_agg` 区分）。A0 拼接器合成单阶段 `count(distinct)`；A 阶段两端都是 Sirius，partial state 自定 |
 | **OQ-009** | Doris master 是否已用 `TExprNodeType.PREDICATE/LITERAL` 代替旧枚举 | 翻译器 | **已答**（09-18，pin 4.1.4）：IDL 里有 `PREDICATE=43/LITERAL=44`，但 FE 4.1.4 **不用**——22 条语料只出现 `SLOT_REF / *_LITERAL / BINARY_PRED / COMPOUND_PRED / ARITHMETIC_EXPR / CAST_EXPR / FUNCTION_CALL / IN_PRED / AGG_EXPR`。翻译器只做旧枚举；换 tag 时用 `run-tpch.sh --translate-only` 重采一遍看 INDEX.md 的覆盖行 |
 | **OQ-010** | 两轨并行的人力分配 | — | 会后定；P0 语料与白名单两轨共用 |
-| **OQ-011** | 合入后的主线顺序：先补证据（main 上重测、pinned、多卡、T1′）还是先做 MVP-A | #2025 第 1～4 步的排期 | #2025 按「重测 → 多卡 → 真 fragment → 多 BE」公开。10-06 答复后建议：多卡搁置，真 fragment / 多 BE 跟 #1807，近期做第 1、5 步（待用户确认） |
+| **OQ-011** | 合入后的主线顺序：先补证据（main 上重测、pinned、多卡、T1′）还是先做 MVP-A | #2025 第 1～4 步的排期 | **已定**（10-06，ADR-013）：多卡搁置；真 fragment / 多 BE 跟 #1807；近期做第 1、5 步 |
 | **OQ-012** | 两个 backend 共享的 Rust 代码放哪：新 crate、`rust/crates/sirius`，还是等 libSirius 边界 | MVP-A 的写法 | **已答**（10-06，mbrobbel）：现在不做 backend 间共享；先定 #1728 的 API，`sirius` crate 建在其上，`ffi` 保留到能切换。Q2（拆 #2016）转给 aocsa，未答 |
 | **OQ-013** | FFI 路径能否单进程多卡、能否中断正在跑的查询、能否并发 | #2025 第 2 步与第 6 步 | **已答**（10-06，mbrobbel）：多卡要和 streaming 算子协调，建议一 BE 一卡；中断走 #1728 的执行 handle（进度、取消/中止）；并发见 #1303（wmalpica 在做） |
 
@@ -403,7 +405,7 @@
 <summary>历史记录</summary>
 
 ### 2026-10-06（第十四次，#1842 合入当天，Mac）
-核对上游：三个 PR 全部合入（#1840/#1841 09-24，#1842 10-06），#137 随之关闭；#1791 已合；Rust `Fragment` 绑定、stream 基数、local exchange 都在 aocsa 的 #2016 里；#1965 是 push_arrow；#1792 已关。给用户出了后续路线：main 上重测、单机多卡、先定共享层再做 MVP-A/B、Mac 并行线。用户拍板 plan-doc 放 fork 分支、PR 不带。新开 `doris-dev`（基于 main）：plan-doc 搬入；harness 移植（去掉报告引用和代号、SF10 基线不进仓库、NUMA 切分、`--ulps` 0.5）；README 链接改成 #2025。上游开 tracking issue #2025（六步路线 + 共享提议 + 五个问题）。新增 ADR-012。
+核对上游：三个 PR 全部合入（#1840/#1841 09-24，#1842 10-06），#137 随之关闭；#1791 已合；Rust `Fragment` 绑定、stream 基数、local exchange 都在 aocsa 的 #2016 里；#1965 是 push_arrow；#1792 已关。给用户出了后续路线：main 上重测、单机多卡、先定共享层再做 MVP-A/B、Mac 并行线。用户拍板 plan-doc 放 fork 分支、PR 不带。新开 `doris-dev`（基于 main）：plan-doc 搬入；harness 移植（去掉报告引用和代号、SF10 基线不进仓库、NUMA 切分、`--ulps` 0.5）；README 链接改成 #2025。上游开 tracking issue #2025（六步路线 + 共享提议 + 五个问题）。新增 ADR-012。同日 mbrobbel 答复 #2025（不做 backend 间共享、一 BE 一卡、#1728 执行 handle、#1303 并发、#1807 exchange 进 Sirius），用户确认按此调整：在 #1807 贴了 Doris exchange 映射，#2025 回帖并把正文改成新路线，tasklist 的 R2/R3 搁置、R4/R5 改为跟 #1807，新增 ADR-013。
 
 #### 参考表（第十三次 session 的「当前状态」：T1 主表，2026-09-19）
 

@@ -302,8 +302,30 @@ glibc ≥ 2.28、io_uring 的 seccomp 放行。
 
 ---
 
+## ADR-013 · 按 #2025 的答复调整路线：一 BE 一卡，exchange 跟 #1807，不抽共享 crate，引擎 API 等 #1728
+
+**日期** 2026-10-06 · **状态** 已定（用户 10-06 确认）· **关系** 取代 ADR-012 第 3 条（共享层先行）；修订 ADR-012 第 2 条的路线（第 2 步搁置，第 3、4、6 步改写）和第 4 条的引擎依赖；取代 ADR-011 第 8 条里 MVP-A（store-and-forward）和 MVP-B（Arrow 先、NIXL 后）的做法
+
+**依据**：mbrobbel 在 #2025 的答复（[comment](https://github.com/sirius-db/sirius/issues/2025#issuecomment-6015233132)）：先不做 backend 之间的代码共享，先定 #1728 的 API，`sirius` crate 建在它上面，`ffi` 保留到能切换为止；这套用法下多卡要和 streaming 算子协调，建议一个 BE 一块 GPU；中断走 #1728 的执行 handle（进度、取消、中止）；context 内并发由 #1303 做；他已开始做 #1807（把 exchange 搬进 Sirius：`ExchangeRel` sink + `ReadRel` source，NIXL，只做 Sirius 节点之间的交换）。
+
+**决策**：
+1. 一个 BE 一块 GPU。#2025 第 2 步（单 BE 多卡）搁置。
+2. 不抽共享 crate。两个 backend 都留在 `ffi` 上，等 #1728 的 API 和建在它上面的 `sirius` crate。
+3. 真 fragment 和多 BE（#2025 第 3、4 步）跟 #1807：Doris 翻译器把 `DATA_STREAM_SINK` / `EXCHANGE_NODE` 映射到 `ExchangeRel` / `ReadRel`，每个 FE fragment 单独一个 plan，exchange（包括跨节点的 NIXL 传输）由引擎做。伪 BE 里不再做基于 `ffi::Fragment` 的 store-and-forward、receiver-first 登记、parked 输出和远端传输。单计划路径保留，作为单 BE 时的快路径。
+4. 取消、进度、并发等 #1728 的执行 handle 和 #1303，落地后伪 BE 迁移过去（#2025 第 6 步）。
+5. 近期主线：#2025 第 1 步（main 上重测、harness PR）和第 5 步（覆盖面、`FrontendService.report`）。
+6. Doris 的 exchange 映射已提给 #1807（[comment](https://github.com/sirius-db/sirius/issues/1807#issuecomment-6017881212)）：分区类型、目的地、sender 计数、merging exchange、派发方式；建议 metadata 用不透明的 peer id，由宿主 backend 解析到 NIXL agent。
+
+**理由**：维护者把方向定了：库 API 先行，exchange 进引擎。Doris 侧如果照抄或抽取 backend 层的 exchange 代码，做完也会被替换。跟 #1807 走的话，跨节点交换只在引擎里实现一次，Doris 只要做翻译器侧的映射和地址解析。Doris 是 #1807 的第二个使用方，早点给出映射，可以避免 metadata 只按 StarRocks 设计。
+
+**放弃了什么**：ADR-012 第 3 条的共享 crate；伪 BE 自建 exchange（store-and-forward、Arrow-over-gRPC、复用 #2016 的 rendezvous）；单 BE 多卡。
+
+**代价**：第 3、4 步什么时候能开工取决于 #1807 的进度（目前还没有子 issue），在那之前只能做第 1、5 步和准备工作；如果 #1807 的算子和 metadata 最后只照 StarRocks 设计，Doris 侧还要再适配。
+
+---
+
 ## 开放问题
 
 见 `handoff.md` 的「待决问题」表。OQ-001 / OQ-006 已由 ADR-011 关闭；OQ-002 / OQ-003 属轨 2，搁置；
 OQ-007（MVP-B 传输）按 ADR-011 第 8 条 Arrow 先、NIXL 后；OQ-008 / OQ-009 在 P0 语料阶段核实。决定后在这里追加对应 ADR。
-OQ-011～OQ-013（合入后的主线顺序、共享代码落点、FFI 多卡/中断/并发）见 ADR-012 与 #2025。
+OQ-011～OQ-013（合入后的主线顺序、共享代码落点、FFI 多卡/中断/并发）已由 ADR-013 关闭（#2025 的答复）。

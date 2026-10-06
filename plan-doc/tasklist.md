@@ -1,6 +1,6 @@
 # 任务分解
 
-进度约定：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成。完成时在条目后补一行 `→ 产出：<路径/commit>`。
+进度约定：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 完成 · `[-]` 不做 / 搁置（写明原因）。完成时在条目后补一行 `→ 产出：<路径/commit>`。
 
 **当前阶段（2026-10-06）：两条轨。**
 - **轨 1 · 伪 BE（ADR-011/012）**：P0 → P1 → MVP-A0 全部完成，并已进上游：#1840/#1841 09-24 合入、**#1842（`experimental/doris`）10-06 合入**，#137 随之关闭。后续路线公开在 tracking issue [#2025](https://github.com/sirius-db/sirius/issues/2025)，对应下文「轨 1 · 合入后路线」。
@@ -107,27 +107,32 @@ join `INNER/LEFT_SEMI/RIGHT_SEMI/RIGHT_ANTI/RIGHT_OUTER/NULL_AWARE_LEFT_ANTI`。
 - [ ] B10-d **T1′**：c7i.24xlarge（配 8xlarge，$4.28/h）只装 `pixi install -e fe` + `fetch-fe/fetch-be`，跑 `native`/`native-split`/`native-olap` SF100，`bench-report.py report --runs <两台> --price native=4.28 --price sirius-buffered=4.529`
 - [ ] B11 T2 可选加测（p5.4xlarge / g7e.2xlarge 只跑 Sirius 侧）——等 T1 主结论后由用户定（§12 Q4）
 
-### [ ] 轨 1 MVP-A · 真 fragment（store-and-forward）→ 见下文「合入后路线」R4（依赖已变：#1791 已合；Rust `Fragment` 绑定、stream 基数、local exchange 在 #2016；#1792 已关）
-### [ ] 轨 1 MVP-B · 多节点 → 见下文「合入后路线」R5（直连交换 #1794/#2016 或 #1965 `push_arrow`；byte-range #1696/#1700）
+### [ ] 轨 1 MVP-A · 真 fragment（store-and-forward）→ 改为跟 #1807（exchange 进 Sirius），见下文「合入后路线」R4（ADR-013）
+### [ ] 轨 1 MVP-B · 多节点 → 一 BE 一卡、走 #1807 的 NIXL exchange，见下文「合入后路线」R5（ADR-013）
 
 ### [~] 轨 1 · 合入后路线（2026-10-06 起；上游 [#2025](https://github.com/sirius-db/sirius/issues/2025)，每条注明对应 #2025 的第几步；R3 对应 #2025 的「共享」一节）
 
 - [x] R0 收尾 ← **已完成 2026-10-06** → 产出：fork 分支 `doris-dev`（基于 `main` `bbc78b52`）：`5e17a209` plan-doc 搬入（含 `mvp-a0-test-report.md`）、`e932db91` harness 移植（14 个文件；去报告引用和代号、SF10 基线不进仓库、NUMA 切分 host tier、`run-tpch-duckdb.sh --ulps 0.5`）、`e97e2633` README 跟踪链接改 #2025；上游 tracking issue #2025；ADR-012
+- [x] R0-b #2025 答复后的调整 ← **已完成 2026-10-06** → 产出：mbrobbel 答复（一 BE 一卡、不抽共享 crate、#1728 执行 handle、#1303 并发、#1807 exchange 进 Sirius）；#1807 贴 Doris exchange 映射（[comment](https://github.com/sirius-db/sirius/issues/1807#issuecomment-6017881212)）；#2025 回帖（[comment](https://github.com/sirius-db/sirius/issues/2025#issuecomment-6017884989)）并把正文改成新路线；ADR-013
 - [ ] R1 **main 上重测**（#2025 第 1 步，GPU 机）：
   - [ ] R1-a GPU 机切 `doris-dev`、重编引擎，SF1 跑 `bench-all.sh` 冒烟（验证 harness 移植）
   - [ ] R1-b SF100 重跑 `native` / `sirius-buffered` / `native-olap` / `duckdb`（替换 #1842 里 rebase 前的数字）
   - [ ] R1-c = B10-c pinned（`duckdb-gpu-pinned` SF100）；伪 BE 走 pin 要 FFI `pin_table`（#2016）
   - [ ] R1-d = B10-d T1′ 同价 CPU 机（看预算）
   - [ ] R1-e harness 上游 PR：从 `main` 切分支 cherry-pick `e932db91` + 修正，Draft，PR 描述放 R1-b 的数
-- [ ] R2 **单进程多卡**（#2025 第 2 步）：g6e.12xlarge，`num_gpus: 0`，SF100 起；先确认 FFI 路径能不能多卡（#2025 Q3）
-- [ ] R3 **共享层**：等 #2025 Q1/Q2 的答复 → `Fragment` 绑定先从 #2016 拆出合入；engine actor + local exchange rendezvous + parked registry 抽到 `rust/crates/`（由我们抽），SR 与 Doris 两边切换过去
-- [ ] R4 **MVP-A 真 fragment**（#2025 第 3 步）：每个 FE fragment 一个 `ffi::Fragment`；EXCHANGE → `sirius_stream_<id>`、DATA_STREAM_SINK → 声明输出、两阶段聚合用 Sirius 自己的 partial state、merging exchange → 接收侧 Sort；声明 stream 基数；单计划路径保留为单 BE 时的快路径；验收 22/22 + A0 vs A 逐条耗时对比
-- [ ] R5 **MVP-B 多 BE / 多机**（#2025 第 4 步）：remote exchange、byte-range 切分、每进程显存/pinned 预算、`FrontendService.report`
+- [-] R2 ~~单进程多卡~~（#2025 第 2 步）**搁置**：mbrobbel 答复，这套用法下多卡要和 streaming 算子协调，建议一 BE 一卡（ADR-013）
+- [-] R3 ~~共享层~~ **不做**：mbrobbel 答复，先定 #1728 的 API，`sirius` crate 建在其上，`ffi` 保留到能切换（ADR-013，ADR-012 第 3 条作废）
+- [ ] R4 **真 fragment，走 #1807**（#2025 第 3 步）：等 #1807 的 exchange 算子和 metadata 定下来 → 翻译器把 `DATA_STREAM_SINK` → `ExchangeRel`、`EXCHANGE_NODE` → `ReadRel`，每个 FE fragment 单独一个 plan（不再拼接）；伪 BE 把 Doris 的目的地（`brpc_server` + `fragment_instance_id`）映射到 Sirius 的 exchange peer；两阶段聚合用 Sirius 自己的 partial state；merging exchange 在接收侧合并；单计划路径保留为单 BE 时的快路径；验收 22/22 + 与单计划路径逐条耗时对比
+  - [x] R4-a Doris 侧 exchange 映射提给 #1807 ← 2026-10-06
+  - [ ] R4-b 评审 #1807 的子 issue / 设计稿（目的地和 peer 的表示、sender 计数、merging exchange）
+- [ ] R5 **多 BE / 多机**（#2025 第 4 步）：一 BE 一卡，走 #1807 的 NIXL exchange；byte-range 切分（#1696/#1700，#2016 里也有）；每进程显存 / pinned 预算；`FrontendService.report`（R6-d）
 - [ ] R6 **覆盖面**（#2025 第 5 步，Mac 可做，与上面并行）：
   - [ ] R6-a 翻译器层语义断言（join 换边、聚合参数错位）进 `doris` CI job（mbrobbel 的 review 意见）
   - [ ] R6-b TPC-DS translate-only 语料 + CPU 差分 + gap 频次表
   - [ ] R6-c 随上游放开 gap：UNION/EXCEPT/INTERSECT（#1993/#1994）、GROUPING SETS（#1991）、cross product（#1968）、窗口（#1802）、upper/lower（#1971）、stddev_samp（#1975）
   - [ ] R6-d 伪 BE 补 `FrontendService.report`（不补的话，伪 BE 一注册，原生 BE 的自动并行度就被压成 1）
+- [ ] R7 **引擎 API 迁移**（#2025 第 6 步）：#1728 的执行 handle（取消、进度）和 #1303 的 context 内并发合入后，伪 BE 从 `ffi` 切到 `sirius` crate，engine actor 改成可以并发提交
+- [ ] R8（可选）把 P0 可嵌入性调研的结论整理成英文需求，提给 #1728 / #840：宿主导出全部符号 → 静态 libstdc++ + 隐藏符号；异常不能跨运行时 → C ABI；内存预算要和 Doris 共用 → #840
 
 ---
 
