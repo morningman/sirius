@@ -1,0 +1,4 @@
+syntax = "proto3";
+package substrait;
+message Rel { string name = 1; repeated Rel inputs = 2; }
+message Plan { uint32 version = 1; repeated Rel relations = 2; map<string,string> extensions = 3; }
